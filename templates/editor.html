@@ -32,6 +32,12 @@
         pointer-events: none; /* Allows clicks to pass through to video controls */
         user-select: none;
         max-width: 90%; /* Prevent overlay from going too wide */
+        transition: background-color 0.1s ease-in-out, border 0.1s ease-in-out; /* Smooth transition for visual feedback */
+    }
+    .subtitle-overlay.dragging {
+        background-color: rgba(0, 0, 0, 0.9); /* Darker when dragging */
+        border: 2px solid #3b82f6; /* Blue border to indicate selection */
+        cursor: grabbing !important; /* Override default grab cursor */
     }
     .subtitle-editable-area {
         max-height: calc(100vh - 200px); /* Adjust height based on viewport and header/footer */
@@ -281,6 +287,7 @@
             if (e.button !== 0 || subtitleDisplay.classList.contains('hidden')) return; // Only left click and visible
             isDragging = true;
             subtitleDisplay.style.pointerEvents = 'auto'; // Make it draggable
+            subtitleDisplay.classList.add('dragging'); // Add dragging class
 
             startX = e.clientX;
             startY = e.clientY;
@@ -320,6 +327,7 @@
         document.addEventListener('mouseup', () => {
             if (isDragging) {
                 isDragging = false;
+                subtitleDisplay.classList.remove('dragging'); // Remove dragging class
                 subtitleDisplay.style.cursor = 'grab';
                 subtitleDisplay.style.pointerEvents = 'none'; // Restore to allow video interaction
             }
