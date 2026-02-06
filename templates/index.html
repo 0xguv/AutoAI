@@ -3,6 +3,7 @@
 {% block title %}Dashboard - Auto Caption{% endblock %}
 
 {% block content %}
+    <div id="auth-status" data-is-authenticated="{{ current_user.is_authenticated | tojson }}" style="display:none;"></div>
     <div class="max-w-3xl mx-auto bg-white p-4 sm:p-6 rounded-lg shadow-md">
         <h1 class="text-2xl font-bold text-gray-900 mb-1">Auto Caption</h1>
         <p class="text-sm text-gray-600 mb-4">Generate subtitles for your videos quickly and easily.</p>
@@ -71,7 +72,8 @@
     <script>
         // Custom JS to toggle spinner, etc.
         let current_job_id_to_poll = null; // New global variable to store job ID
-        const isAuthenticated = {{ current_user.is_authenticated | tojson }}; // Pass auth status to JS
+        const authStatusDiv = document.getElementById('auth-status');
+        const isAuthenticated = authStatusDiv ? JSON.parse(authStatusDiv.dataset.isAuthenticated) : false; // Read from data attribute
         const uploadForm = document.getElementById('upload-form');
         const submitButton = document.getElementById('submit-button');
         const spinner = submitButton.querySelector('.spinner');
@@ -86,10 +88,8 @@
         const downloadLinkArea = document.getElementById('download-link-area');
         const downloadLinkPlaceholder = document.getElementById('download-link-placeholder');
 
-        const sidebar = document.getElementById('sidebar'); // This will now come from base.html
-        const mobileSidebarToggle = document.getElementById('mobile-sidebar-toggle'); // This will now come from base.html
-        const processingPopup = document.getElementById('processing-popup'); // This will now come from base.html
-        const processingOverlay = document.getElementById('processing-overlay'); // This will now come from base.html
+        const processingPopup = document.getElementById('processing-popup');
+        const processingOverlay = document.getElementById('processing-overlay');
 
 
         function truncateFileName(fileName, maxLength = 30) {
@@ -123,12 +123,6 @@
                 fileNameDisplay.innerHTML = `Drag & Drop or <strong class="text-black">click to browse</strong>`;
             }
         });
-
-        // mobileSidebarToggle.addEventListener('click', () => { // Moved to base.html script
-        //     document.body.classList.toggle('sidebar-open');
-        //     document.body.classList.toggle('sidebar-closed');
-        //     mobileSidebarToggle.classList.toggle('active'); /* Toggle active class for hamburger animation */
-        // });
 
         uploadForm.addEventListener('submit', async function(event) {
             event.preventDefault();
