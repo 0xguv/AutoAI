@@ -177,15 +177,6 @@ class UsageLog(db.Model):
         return f'<UsageLog {self.user.username} {self.date} - {self.videos_processed} videos>'
 
 
-# Auto-create database tables on startup (for Railway deployment)
-with app.app_context():
-    try:
-        db.create_all()
-        app.logger.info("Database tables created successfully (or already exist)")
-    except Exception as e:
-        app.logger.error(f"Error creating database tables: {e}")
-
-
 def seconds_to_srt_time(seconds):
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
@@ -954,6 +945,18 @@ def save_and_burn():
         job_entry.status = 'failed'
         db.session.commit()
         return jsonify({"status": "error", "message": f"Failed to save and burn subtitles: {e}"}), 500
+
+# Auto-create database tables before first request (for Railway deployment)
+@app.before_request
+def create_tables():
+    create_tables.has_run = getattr(create_tables, 'has_run', False)
+    if not create_tables.has_run:
+        try:
+            db.create_all()
+            app.logger.info("Database tables created successfully")
+        except Exception as e:
+            app.logger.error(f"Error creating database tables: {e}")
+        create_tables.has_run = True
 
 if __name__ == '__main__':
     app.run(debug=True)
