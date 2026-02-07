@@ -50,6 +50,19 @@
                 </select>
             </div>
             
+            <div class="form-group">
+                <label for="video_format" class="block text-xs font-semibold text-gray-900 mb-1">Video Format:</label>
+                <select id="video_format" name="video_format" class="form-control w-full px-2 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black transition-colors bg-white text-gray-900 text-sm">
+                    <option value="mp4">MP4 (Recommended)</option>
+                    <option value="mov">MOV (QuickTime)</option>
+                    <option value="avi">AVI</option>
+                    <option value="mkv">MKV</option>
+                    <option value="webm">WebM</option>
+                    <option value="wmv">WMV</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Select the format of your uploaded video for better processing</p>
+            </div>
+            
             <button type="submit" id="submit-button" class="w-full bg-[#18181b] text-white font-medium py-2 rounded-md hover:bg-gray-800 transition text-sm">
                 <span class="flex items-center justify-center">
                     <span class="spinner hidden"></span> Process
