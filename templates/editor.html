@@ -79,6 +79,85 @@
         cursor: grabbing;
     }
 
+    /* Position Guidelines */
+    .guidelines-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        pointer-events: none;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .guidelines-container.active {
+        opacity: 1;
+    }
+    
+    .guideline {
+        position: absolute;
+        background: rgba(16, 185, 129, 0.5);
+        pointer-events: none;
+    }
+    
+    .guideline-h {
+        left: 0;
+        right: 0;
+        height: 1px;
+    }
+    
+    .guideline-v {
+        top: 0;
+        bottom: 0;
+        width: 1px;
+    }
+    
+    .guideline-top {
+        top: 10%;
+    }
+    
+    .guideline-bottom {
+        bottom: 10%;
+    }
+    
+    .guideline-left {
+        left: 10%;
+    }
+    
+    .guideline-right {
+        right: 10%;
+    }
+    
+    .guideline-center-h {
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    .guideline-center-v {
+        left: 50%;
+        transform: translateX(-50%);
+    }
+    
+    .position-indicator {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 10;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .position-indicator.active {
+        opacity: 1;
+    }
+
     .subtitle-overlay {
         position: absolute;
         bottom: 15%;
@@ -464,6 +543,21 @@
                         Your browser does not support the video tag.
                     </video>
                     <div id="subtitle-display" class="subtitle-overlay hidden"></div>
+                    
+                    <!-- Position Guidelines -->
+                    <div id="guidelines" class="guidelines-container">
+                        <div class="guideline guideline-h guideline-top"></div>
+                        <div class="guideline guideline-h guideline-bottom"></div>
+                        <div class="guideline guideline-h guideline-center-h"></div>
+                        <div class="guideline guideline-v guideline-left"></div>
+                        <div class="guideline guideline-v guideline-right"></div>
+                        <div class="guideline guideline-v guideline-center-v"></div>
+                    </div>
+                    
+                    <!-- Position Indicator -->
+                    <div id="position-indicator" class="position-indicator">
+                        Position: <span id="pos-x">50</span>%, <span id="pos-y">10</span>%
+                    </div>
                 </div>
             </div>
 
@@ -599,7 +693,7 @@
                 end: sub.end,
                 text: sub.text.replace(/<[^>]*>?/gm, ''), // Strip HTML tags
                 originalText: sub.text.replace(/<[^>]*>?/gm, ''),
-                position: { x: 50, y: 10 } // Default position (50% from left, 10% from bottom, for example)
+                position: { x: currentGlobalPosition.x, y: currentGlobalPosition.y } // Use global position
             }));
         }
 
@@ -714,8 +808,9 @@
 
             if (activeSubtitle) {
                 subtitleDisplay.textContent = activeSubtitle.text;
-                subtitleDisplay.style.left = `${activeSubtitle.position.x}%`;
-                subtitleDisplay.style.bottom = `${activeSubtitle.position.y}%`;
+                // Use global position for all subtitles
+                subtitleDisplay.style.left = `${currentGlobalPosition.x}%`;
+                subtitleDisplay.style.bottom = `${currentGlobalPosition.y}%`;
                 subtitleDisplay.classList.remove('hidden');
             } else {
                 subtitleDisplay.classList.add('hidden');
@@ -727,23 +822,33 @@
             }
         });
 
-        // Positional editing (drag and drop) - Basic implementation
+        // Positional editing (drag and drop) - Fixed implementation
         let isDragging = false;
         let startX, startY, startBottom, startLeft;
+        let currentGlobalPosition = { x: 50, y: 10 }; // Default position for all subtitles
+        
+        const guidelines = document.getElementById('guidelines');
+        const positionIndicator = document.getElementById('position-indicator');
+        const posXDisplay = document.getElementById('pos-x');
+        const posYDisplay = document.getElementById('pos-y');
 
         subtitleDisplay.addEventListener('mousedown', (e) => {
-            if (e.button !== 0 || subtitleDisplay.classList.contains('hidden')) return; // Only left click and visible
+            if (e.button !== 0 || subtitleDisplay.classList.contains('hidden')) return;
             isDragging = true;
-            subtitleDisplay.style.pointerEvents = 'auto'; // Make it draggable
-            subtitleDisplay.classList.add('dragging'); // Add dragging class
+            subtitleDisplay.classList.add('dragging');
+            
+            // Show guidelines and position indicator
+            if (guidelines) guidelines.classList.add('active');
+            if (positionIndicator) positionIndicator.classList.add('active');
 
             startX = e.clientX;
             startY = e.clientY;
-            startBottom = parseFloat(subtitleDisplay.style.bottom);
-            startLeft = parseFloat(subtitleDisplay.style.left);
+            
+            // Use current global position as starting point
+            startBottom = currentGlobalPosition.y;
+            startLeft = currentGlobalPosition.x;
 
             subtitleDisplay.style.cursor = 'grabbing';
-            // Prevent text selection during drag
             e.preventDefault();
         });
 
@@ -758,35 +863,43 @@
             const newLeft = startLeft + (deltaX / videoRect.width) * 100;
             const newBottom = startBottom - (deltaY / videoRect.height) * 100; // Invert deltaY for bottom
 
-            // Clamp values to stay within bounds
-            const clampedLeft = Math.max(0, Math.min(100, newLeft));
-            const clampedBottom = Math.max(0, Math.min(100, newBottom));
+            // Clamp values to stay within bounds (5% to 95% to keep subtitle visible)
+            const clampedLeft = Math.max(5, Math.min(95, newLeft));
+            const clampedBottom = Math.max(5, Math.min(95, newBottom));
 
+            // Update display position
             subtitleDisplay.style.left = `${clampedLeft}%`;
             subtitleDisplay.style.bottom = `${clampedBottom}%`;
-
-            // Update current active subtitle's position data
-            if (currentSubtitleIndex !== -1) {
-                subtitles[currentSubtitleIndex].position.x = clampedLeft;
-                subtitles[currentSubtitleIndex].position.y = clampedBottom;
-            }
+            
+            // Update global position for ALL subtitles
+            currentGlobalPosition.x = clampedLeft;
+            currentGlobalPosition.y = clampedBottom;
+            
+            // Update all subtitles to use the same position
+            subtitles.forEach(sub => {
+                sub.position.x = clampedLeft;
+                sub.position.y = clampedBottom;
+            });
+            
+            // Update position indicator
+            if (posXDisplay) posXDisplay.textContent = Math.round(clampedLeft);
+            if (posYDisplay) posYDisplay.textContent = Math.round(clampedBottom);
         });
 
-        document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                subtitleDisplay.classList.remove('dragging'); // Remove dragging class
-                subtitleDisplay.style.cursor = 'grab';
-            }
-        });
-
-        document.addEventListener('mouseleave', () => {
+        function stopDragging() {
             if (isDragging) {
                 isDragging = false;
                 subtitleDisplay.classList.remove('dragging');
                 subtitleDisplay.style.cursor = 'grab';
+                
+                // Hide guidelines and position indicator
+                if (guidelines) guidelines.classList.remove('active');
+                if (positionIndicator) positionIndicator.classList.remove('active');
             }
-        });
+        }
+
+        document.addEventListener('mouseup', stopDragging);
+        document.addEventListener('mouseleave', stopDragging);
 
         // Touch support for mobile dragging
         subtitleDisplay.addEventListener('touchstart', (e) => {
@@ -794,11 +907,17 @@
             isDragging = true;
             subtitleDisplay.classList.add('dragging');
             
+            // Show guidelines and position indicator
+            if (guidelines) guidelines.classList.add('active');
+            if (positionIndicator) positionIndicator.classList.add('active');
+            
             const touch = e.touches[0];
             startX = touch.clientX;
             startY = touch.clientY;
-            startBottom = parseFloat(subtitleDisplay.style.bottom) || 10;
-            startLeft = parseFloat(subtitleDisplay.style.left) || 50;
+            
+            // Use current global position
+            startBottom = currentGlobalPosition.y;
+            startLeft = currentGlobalPosition.x;
             
             e.preventDefault();
         }, { passive: false });
@@ -814,26 +933,32 @@
             const newLeft = startLeft + (deltaX / videoRect.width) * 100;
             const newBottom = startBottom - (deltaY / videoRect.height) * 100;
             
-            const clampedLeft = Math.max(0, Math.min(100, newLeft));
-            const clampedBottom = Math.max(0, Math.min(100, newBottom));
+            const clampedLeft = Math.max(5, Math.min(95, newLeft));
+            const clampedBottom = Math.max(5, Math.min(95, newBottom));
             
             subtitleDisplay.style.left = `${clampedLeft}%`;
             subtitleDisplay.style.bottom = `${clampedBottom}%`;
             
-            if (currentSubtitleIndex !== -1) {
-                subtitles[currentSubtitleIndex].position.x = clampedLeft;
-                subtitles[currentSubtitleIndex].position.y = clampedBottom;
-            }
+            // Update global position for ALL subtitles
+            currentGlobalPosition.x = clampedLeft;
+            currentGlobalPosition.y = clampedBottom;
+            
+            subtitles.forEach(sub => {
+                sub.position.x = clampedLeft;
+                sub.position.y = clampedBottom;
+            });
+            
+            // Update position indicator
+            if (posXDisplay) posXDisplay.textContent = Math.round(clampedLeft);
+            if (posYDisplay) posYDisplay.textContent = Math.round(clampedBottom);
         }, { passive: false });
 
-        document.addEventListener('touchend', () => {
-            if (isDragging) {
-                isDragging = false;
-                subtitleDisplay.classList.remove('dragging');
-            }
-        });
+        document.addEventListener('touchend', stopDragging);
 
-        subtitleDisplay.style.cursor = 'grab'; // Initial cursor style
+        // Set initial subtitle position
+        subtitleDisplay.style.left = `${currentGlobalPosition.x}%`;
+        subtitleDisplay.style.bottom = `${currentGlobalPosition.y}%`;
+        subtitleDisplay.style.cursor = 'grab';
 
         // Save & Burn button click handler
         saveBurnButton.addEventListener('click', async () => {
