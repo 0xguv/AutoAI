@@ -70,7 +70,40 @@
             </button>
         </form>
 
-        
+        <!-- Global Stats -->
+        <div id="global-stats" class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div class="grid grid-cols-3 gap-4 text-center text-sm">
+                <div>
+                    <span class="block text-gray-500">Queued</span>
+                    <span id="queued-count" class="font-bold text-lg">0</span>
+                </div>
+                <div>
+                    <span class="block text-gray-500">Processing</span>
+                    <span id="processing-count" class="font-bold text-lg">0</span>
+                </div>
+                <div>
+                    <span class="block text-gray-500">Workers</span>
+                    <span id="worker-count" class="font-bold text-lg">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Download/Status Area -->
+        <div id="download-link-area" class="hidden mt-6 p-4 rounded-lg border">
+            <div id="download-link-placeholder"></div>
+        </div>
+    </div>
+
+    <!-- Processing Overlay -->
+    <div id="processing-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-40"></div>
+    
+    <!-- Processing Popup -->
+    <div id="processing-popup" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white p-6 rounded-lg shadow-xl hidden z-50">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
+            <p class="text-lg font-semibold">Processing...</p>
+            <p class="text-sm text-gray-500 mt-2">Please wait while we process your video</p>
+        </div>
     </div>
 {% endblock %}
 
