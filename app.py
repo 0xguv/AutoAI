@@ -848,6 +848,7 @@ def get_editor_data(job_id):
         return jsonify({"status": "error", "message": f"Video is not ready for editing (current status: {job_entry.status})."}), 400
 
     video_url = url_for('download_file', filename=os.path.basename(job_entry.original_video_filepath))
+    app.logger.info(f"Generated video_url for job {job_id}: {video_url}")
     
     srt_content = ""
     try:
