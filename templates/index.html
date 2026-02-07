@@ -164,7 +164,7 @@
 
                 if (data.status === 'success') {
                     current_job_id_to_poll = data.job_id; // Store job ID
-                    // The fetchQueueStats interval will now pick this up
+                    startJobPolling(data.job_id); // Start polling for this job
                 } else {
                     // This 'else' block handles cases where status is not 'success' but HTTP is 2xx
                     hideProcessingOverlayAndPopup();
@@ -224,8 +224,65 @@
         }
 
 
+        // Queue stats function - fetches global queue information
+        async function fetchQueueStats() {
+            try {
+                const response = await fetch('/api/queue_stats');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (queuedCountSpan) queuedCountSpan.textContent = data.queued_jobs || 0;
+                    if (processingCountSpan) processingCountSpan.textContent = data.started_jobs || 0;
+                    if (workerCountSpan) workerCountSpan.textContent = data.total_workers || 0;
+                }
+            } catch (error) {
+                console.error('Error fetching queue stats:', error);
+            }
+        }
+
+        // Poll for job status after upload
+        function startJobPolling(jobId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/job_status/${jobId}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'completed') {
+                        clearInterval(pollInterval);
+                        hideProcessingOverlayAndPopup();
+                        
+                        // Show download link
+                        downloadLinkArea.classList.remove('hidden', 'bg-red-100', 'border-red-400', 'text-red-700');
+                        downloadLinkArea.classList.add('bg-green-100', 'border-green-400', 'text-green-700');
+                        downloadLinkPlaceholder.innerHTML = `
+                            <span class="font-bold">Processing complete!</span><br>
+                            <a href="${data.result.video_url}" class="underline font-semibold hover:text-green-800">Download your video</a>
+                        `;
+                    } else if (data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        hideProcessingOverlayAndPopup();
+                        
+                        downloadLinkArea.classList.remove('hidden', 'bg-green-100', 'border-green-400', 'text-green-700');
+                        downloadLinkArea.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+                        downloadLinkPlaceholder.innerHTML = `<span>Processing failed: ${data.error || 'Unknown error'}</span>`;
+                        downloadLinkArea.classList.remove('hidden');
+                    } else if (data.status === 'transcribed') {
+                        clearInterval(pollInterval);
+                        hideProcessingOverlayAndPopup();
+                        
+                        // Redirect to editor
+                        if (data.redirect_url) {
+                            window.location.href = data.redirect_url;
+                        }
+                    }
+                    // For 'pending', 'started', etc., continue polling
+                } catch (error) {
+                    console.error('Error polling job status:', error);
+                }
+            }, 3000); // Poll every 3 seconds
+        }
+
         // Initial call for queue stats and set interval
-        fetchQueueStats(); // <--- Now fetchQueueStats is defined
+        fetchQueueStats();
         setInterval(fetchQueueStats, 5000);
 
         function hideProcessingOverlayAndPopup() {
@@ -234,8 +291,7 @@
             submitButton.disabled = false;
             spinner.classList.add('hidden');
             submitButton.querySelector('span').lastChild.textContent = ' Process';
-            // Removed: jobStatusAreaDiv.style.display = 'block';
-            globalStatsDiv.style.display = 'block'; // Keep global stats visible
+            globalStatsDiv.style.display = 'block';
         }
     </script>
 {% endblock %}
