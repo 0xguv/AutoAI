@@ -958,5 +958,17 @@ def create_tables():
             app.logger.error(f"Error creating database tables: {e}")
         create_tables.has_run = True
 
+# Serve Svelte frontend
+@app.route('/editor-new')
+@login_required
+def editor_new():
+    """Serve the new Svelte-based video editor"""
+    return send_from_directory('static/dist', 'index.html')
+
+# Serve Svelte static assets
+@app.route('/assets/<path:filename>')
+def serve_svelte_assets(filename):
+    return send_from_directory('static/dist/assets', filename)
+
 if __name__ == '__main__':
     app.run(debug=True)
