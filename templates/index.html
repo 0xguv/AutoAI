@@ -111,6 +111,47 @@
         <div id="download-link-area" class="hidden mt-6 p-4 rounded-lg border">
             <div id="download-link-placeholder"></div>
         </div>
+
+        <!-- Created by RIZKI -->
+        <div class="mt-6 text-center relative">
+            <p class="text-gray-400 text-sm">
+                Created by 
+                <span id="rizki-link" class="font-semibold text-gray-600 hover:text-blue-500 cursor-pointer transition-colors relative inline-block">
+                    RIZKI
+                    <!-- Popup tooltip -->
+                    <span id="rizki-tooltip" class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded opacity-0 pointer-events-none transition-opacity duration-200 whitespace-nowrap">
+                        don't click
+                        <span class="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-800"></span>
+                    </span>
+                </span>
+            </p>
+        </div>
+
+        <script>
+            // RIZKI link functionality
+            document.addEventListener('DOMContentLoaded', function() {
+                const rizkiLink = document.getElementById('rizki-link');
+                const rizkiTooltip = document.getElementById('rizki-tooltip');
+                
+                if (rizkiLink && rizkiTooltip) {
+                    // Show tooltip on hover
+                    rizkiLink.addEventListener('mouseenter', function() {
+                        rizkiTooltip.classList.remove('opacity-0');
+                    });
+                    
+                    // Hide tooltip on mouse leave
+                    rizkiLink.addEventListener('mouseleave', function() {
+                        rizkiTooltip.classList.add('opacity-0');
+                    });
+                    
+                    // Redirect on click
+                    rizkiLink.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank');
+                    });
+                }
+            });
+        </script>
     </div>
 
     <!-- Processing Overlay -->
