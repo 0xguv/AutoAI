@@ -779,7 +779,7 @@ def upload_file():
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/api/job_status/<job_id>')
 @login_required
@@ -847,7 +847,7 @@ def get_editor_data(job_id):
     if job_entry.status not in ['transcribed', 'editing']:
         return jsonify({"status": "error", "message": f"Video is not ready for editing (current status: {job_entry.status})."}), 400
 
-    video_url = url_for('download_file', filename=os.path.basename(job_entry.original_video_filepath), _external=True)
+    video_url = url_for('download_file', filename=os.path.basename(job_entry.original_video_filepath))
     
     srt_content = ""
     try:
