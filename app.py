@@ -898,7 +898,9 @@ def edit_video(job_id):
     job_entry.status = 'editing' # Update status to indicate it's being edited
     db.session.commit()
 
-    return send_from_directory('static/dist', 'index.html')
+    response = make_response(send_from_directory('static/dist', 'index.html'))
+    response.headers['Content-Security-Policy'] = "script-src 'self' 'unsafe-eval' https://cdn.tailwindcss.com; object-src 'none'; base-uri 'self';"
+    return response
 
 @app.route('/api/queue_stats')
 def queue_stats():
