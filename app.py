@@ -973,7 +973,7 @@ def save_and_burn():
 def add_csp_header(response):
     # Temporarily relax CSP for debugging 'unsafe-eval' and tailwind CDN
     # WARNING: This is INSECURE for production. Remove or tighten for deployment.
-    csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self';"
+    csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self';"
     response.headers['Content-Security-Policy'] = csp
     return response
 
