@@ -482,6 +482,9 @@
         const spinner = saveBurnButton.querySelector('.spinner');
         const srtRawContentElement = document.getElementById('srt-raw-content');
 
+        // Flask template variables
+        const original_filename = {{ original_filename | tojson }};
+
         // New popup elements
         const editorProcessingOverlay = document.getElementById('editor-processing-overlay');
         const editorProcessingPopup = document.getElementById('editor-processing-popup');
