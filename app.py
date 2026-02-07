@@ -202,12 +202,10 @@ def transcribe_video_task(user_id, original_filepath, filename, language, user_m
             video_duration = get_video_duration(original_filepath)
             if video_duration is None:
                 app.logger.error(f"Could not determine video duration for transcription job {current_job_id}. Skipping processing.")
-                os.remove(original_filepath)
                 return {"status": "failed", "error": "Could not determine video duration. Is ffprobe installed?"}
 
             if video_duration > user_max_duration * 60:
                 app.logger.error(f"Video duration ({video_duration / 60:.1f} min) exceeds limit of {user_max_duration} minutes for transcription job {current_job_id}. Skipping processing.")
-                os.remove(original_filepath)
                 return {"status": "failed", "error": f"Video duration ({video_duration / 60:.1f} min) exceeds your limit of {user_max_duration} minutes."}
             
             audio_filename_base = os.path.splitext(filename)[0]
@@ -262,8 +260,6 @@ def transcribe_video_task(user_id, original_filepath, filename, language, user_m
             app.logger.error(f"FFmpeg command failed for transcription job {current_job_id} with exit code {e.returncode}")
             app.logger.error(f"FFmpeg stdout: {e.stdout.decode(errors='ignore')}")
             app.logger.error(f"FFmpeg stderr: {e.stderr.decode(errors='ignore')}")
-            if os.path.exists(original_filepath):
-                os.remove(original_filepath)
             return {"status": "failed", "error": f"FFmpeg audio extraction error: {e.stderr.decode(errors='ignore')}"}
         except Exception as e:
             # Update job status to failed
@@ -272,8 +268,6 @@ def transcribe_video_task(user_id, original_filepath, filename, language, user_m
                 job_entry.status = 'failed'
                 db.session.commit()
             app.logger.error(f"An unexpected error occurred for transcription job {current_job_id}: {e}")
-            if os.path.exists(original_filepath):
-                os.remove(original_filepath)
             return {"status": "failed", "error": f"An unexpected error occurred during transcription: {e}"}
 
 
