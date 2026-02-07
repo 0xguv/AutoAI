@@ -50,6 +50,35 @@
         object-fit: contain;
     }
 
+    /* Hide video download button and menu (three dots) */
+    video::-webkit-media-controls-enclosure {
+        overflow: hidden;
+    }
+    
+    video::-webkit-media-controls-panel {
+        width: calc(100% + 30px); /* Hide overflow menu button */
+    }
+    
+    /* Specifically hide the menu/overflow button */
+    video::-webkit-media-controls-overflow-button {
+        display: none !important;
+    }
+    
+    /* Alternative: hide all overflow controls */
+    video::-webkit-media-controls-overflow-menu {
+        display: none !important;
+    }
+
+    /* Make subtitle overlay draggable */
+    .subtitle-overlay {
+        cursor: grab;
+        pointer-events: auto !important;
+    }
+    
+    .subtitle-overlay:active {
+        cursor: grabbing;
+    }
+
     .subtitle-overlay {
         position: absolute;
         bottom: 15%;
@@ -748,7 +777,59 @@
                 isDragging = false;
                 subtitleDisplay.classList.remove('dragging'); // Remove dragging class
                 subtitleDisplay.style.cursor = 'grab';
-                subtitleDisplay.style.pointerEvents = 'none'; // Restore to allow video interaction
+            }
+        });
+
+        document.addEventListener('mouseleave', () => {
+            if (isDragging) {
+                isDragging = false;
+                subtitleDisplay.classList.remove('dragging');
+                subtitleDisplay.style.cursor = 'grab';
+            }
+        });
+
+        // Touch support for mobile dragging
+        subtitleDisplay.addEventListener('touchstart', (e) => {
+            if (subtitleDisplay.classList.contains('hidden')) return;
+            isDragging = true;
+            subtitleDisplay.classList.add('dragging');
+            
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            startBottom = parseFloat(subtitleDisplay.style.bottom) || 10;
+            startLeft = parseFloat(subtitleDisplay.style.left) || 50;
+            
+            e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - startX;
+            const deltaY = touch.clientY - startY;
+            
+            const videoRect = videoPlayer.getBoundingClientRect();
+            const newLeft = startLeft + (deltaX / videoRect.width) * 100;
+            const newBottom = startBottom - (deltaY / videoRect.height) * 100;
+            
+            const clampedLeft = Math.max(0, Math.min(100, newLeft));
+            const clampedBottom = Math.max(0, Math.min(100, newBottom));
+            
+            subtitleDisplay.style.left = `${clampedLeft}%`;
+            subtitleDisplay.style.bottom = `${clampedBottom}%`;
+            
+            if (currentSubtitleIndex !== -1) {
+                subtitles[currentSubtitleIndex].position.x = clampedLeft;
+                subtitles[currentSubtitleIndex].position.y = clampedBottom;
+            }
+        }, { passive: false });
+
+        document.addEventListener('touchend', () => {
+            if (isDragging) {
+                isDragging = false;
+                subtitleDisplay.classList.remove('dragging');
             }
         });
 
