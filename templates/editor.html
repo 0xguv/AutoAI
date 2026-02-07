@@ -84,7 +84,7 @@
         cursor: grabbing;
     }
 
-    /* Position Guidelines */
+    /* Position Guidelines - 4 lines that follow subtitle */
     .guidelines-container {
         position: absolute;
         top: 0;
@@ -103,46 +103,20 @@
     
     .guideline {
         position: absolute;
-        background: rgba(16, 185, 129, 0.5);
+        background: rgba(16, 185, 129, 0.6);
         pointer-events: none;
     }
     
     .guideline-h {
         left: 0;
         right: 0;
-        height: 1px;
+        height: 2px;
     }
     
     .guideline-v {
         top: 0;
         bottom: 0;
-        width: 1px;
-    }
-    
-    .guideline-top {
-        top: 10%;
-    }
-    
-    .guideline-bottom {
-        bottom: 10%;
-    }
-    
-    .guideline-left {
-        left: 10%;
-    }
-    
-    .guideline-right {
-        right: 10%;
-    }
-    
-    .guideline-center-h {
-        top: 50%;
-        transform: translateY(-50%);
-    }
-    
-    .guideline-center-v {
-        left: 50%;
-        transform: translateX(-50%);
+        width: 2px;
     }
     
     .position-indicator {
@@ -176,11 +150,14 @@
         font-weight: 500;
         text-align: center;
         pointer-events: none;
-        max-width: 85%;
+        width: auto;
+        min-width: 200px;
+        max-width: 80%;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
         border: 2px solid transparent;
-        transition: all 0.2s ease;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
         backdrop-filter: blur(4px);
+        white-space: nowrap;
     }
 
     .subtitle-overlay.dragging {
@@ -549,14 +526,12 @@
                     </video>
                     <div id="subtitle-display" class="subtitle-overlay hidden"></div>
                     
-                    <!-- Position Guidelines -->
+                    <!-- Position Guidelines - 4 lines that move with subtitle -->
                     <div id="guidelines" class="guidelines-container">
-                        <div class="guideline guideline-h guideline-top"></div>
-                        <div class="guideline guideline-h guideline-bottom"></div>
-                        <div class="guideline guideline-h guideline-center-h"></div>
-                        <div class="guideline guideline-v guideline-left"></div>
-                        <div class="guideline guideline-v guideline-right"></div>
-                        <div class="guideline guideline-v guideline-center-v"></div>
+                        <div id="guideline-top" class="guideline guideline-h"></div>
+                        <div id="guideline-bottom" class="guideline guideline-h"></div>
+                        <div id="guideline-left" class="guideline guideline-v"></div>
+                        <div id="guideline-right" class="guideline guideline-v"></div>
                     </div>
                     
                     <!-- Position Indicator -->
@@ -833,9 +808,24 @@
         let currentGlobalPosition = { x: 50, y: 10 }; // Default position for all subtitles
         
         const guidelines = document.getElementById('guidelines');
+        const guidelineTop = document.getElementById('guideline-top');
+        const guidelineBottom = document.getElementById('guideline-bottom');
+        const guidelineLeft = document.getElementById('guideline-left');
+        const guidelineRight = document.getElementById('guideline-right');
         const positionIndicator = document.getElementById('position-indicator');
         const posXDisplay = document.getElementById('pos-x');
         const posYDisplay = document.getElementById('pos-y');
+        
+        // Function to update guideline positions to follow subtitle
+        function updateGuidelines(left, bottom) {
+            if (guidelineTop) guidelineTop.style.bottom = `${bottom}%`;
+            if (guidelineBottom) guidelineBottom.style.bottom = `${bottom}%`;
+            if (guidelineLeft) guidelineLeft.style.left = `${left}%`;
+            if (guidelineRight) guidelineRight.style.left = `${left}%`;
+        }
+        
+        // Initialize guidelines at default position
+        updateGuidelines(currentGlobalPosition.x, currentGlobalPosition.y);
 
         subtitleDisplay.addEventListener('mousedown', (e) => {
             if (e.button !== 0 || subtitleDisplay.classList.contains('hidden')) return;
@@ -889,6 +879,9 @@
             // Update position indicator
             if (posXDisplay) posXDisplay.textContent = Math.round(clampedLeft);
             if (posYDisplay) posYDisplay.textContent = Math.round(clampedBottom);
+            
+            // Update guidelines to follow subtitle
+            updateGuidelines(clampedLeft, clampedBottom);
         });
 
         function stopDragging() {
@@ -956,6 +949,9 @@
             // Update position indicator
             if (posXDisplay) posXDisplay.textContent = Math.round(clampedLeft);
             if (posYDisplay) posYDisplay.textContent = Math.round(clampedBottom);
+            
+            // Update guidelines to follow subtitle
+            updateGuidelines(clampedLeft, clampedBottom);
         }, { passive: false });
 
         document.addEventListener('touchend', stopDragging);
