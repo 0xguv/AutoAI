@@ -3,7 +3,7 @@ import os
 import tempfile
 import redis
 from rq import Queue, Worker
-from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash, jsonify
+from flask import Flask, request, render_template, redirect, url_for, send_from_directory, flash, jsonify, make_response
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
