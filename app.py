@@ -969,6 +969,14 @@ def save_and_burn():
         db.session.commit()
         return jsonify({"status": "error", "message": f"Failed to save and burn subtitles: {e}"}), 500
 
+@app.after_request
+def add_csp_header(response):
+    # Temporarily relax CSP for debugging 'unsafe-eval' and tailwind CDN
+    # WARNING: This is INSECURE for production. Remove or tighten for deployment.
+    csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self';"
+    response.headers['Content-Security-Policy'] = csp
+    return response
+
 # Auto-create database tables before first request (for Railway deployment)
 @app.before_request
 def create_tables():
