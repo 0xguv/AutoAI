@@ -326,6 +326,7 @@
               <HormoziSubtitles 
                 {videoElement} 
                 {captions}
+                bind:position={subtitlePosition}
                 maxWordsPerLine={3}
                 backgroundColor="#FF0000"
                 activeWordColor="#FFFFFF"
@@ -333,6 +334,7 @@
                 fontSize="clamp(20px, 3vw, 40px)"
                 enablePopAnimation={true}
                 popScale={1.1}
+                on:positionChange={(e) => subtitlePosition = e.detail}
               />
             {/if}
           </div>

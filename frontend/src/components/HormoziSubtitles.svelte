@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte'
   
   export let videoElement
   export let captions = []
@@ -10,6 +10,9 @@
   export let fontSize = 'clamp(28px, 4vw, 56px)'
   export let enablePopAnimation = true
   export let popScale = 1.15
+  export let position = { x: 50, y: 15 }
+  
+  const dispatch = createEventDispatcher()
   
   let currentTime = 0
   let activeWordIndex = -1
@@ -17,6 +20,9 @@
   let isPlaying = false
   let rafId = null
   let mounted = false
+  let containerRef = null
+  let isDragging = false
+  let dragStart = { mouseX: 0, mouseY: 0, posX: 0, posY: 0 }
   
   // Convert captions to word-level timestamps with variable timing
   $: wordTimestamps = captions.flatMap(caption => {
@@ -91,6 +97,48 @@
     }
   }
   
+  // Drag handlers
+  function handleMouseDown(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!containerRef) return
+    
+    isDragging = true
+    dragStart = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      posX: position.x,
+      posY: position.y
+    }
+    
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+  }
+  
+  function handleMouseMove(e) {
+    if (!isDragging) return
+    
+    const deltaX = e.clientX - dragStart.mouseX
+    const deltaY = e.clientY - dragStart.mouseY
+    
+    // Convert to percentage (rough estimate based on screen size)
+    const parentRect = containerRef.parentElement?.getBoundingClientRect()
+    if (parentRect) {
+      position.x = Math.max(5, Math.min(95, dragStart.posX + (deltaX / parentRect.width) * 100))
+      position.y = Math.max(5, Math.min(50, dragStart.posY - (deltaY / parentRect.height) * 100))
+    }
+  }
+  
+  function handleMouseUp() {
+    isDragging = false
+    window.removeEventListener('mousemove', handleMouseMove)
+    window.removeEventListener('mouseup', handleMouseUp)
+    
+    // Dispatch position change event
+    dispatch('positionChange', { x: position.x, y: position.y })
+  }
+  
   // React to caption changes
   $: if (captions && captions.length > 0 && mounted) {
     updateVisibleWords()
@@ -163,13 +211,21 @@
   onDestroy(() => {
     mounted = false
     if (rafId) cancelAnimationFrame(rafId)
+    window.removeEventListener('mousemove', handleMouseMove)
+    window.removeEventListener('mouseup', handleMouseUp)
   })
 </script>
 
 {#if visibleWords.length > 0}
   <div 
+    bind:this={containerRef}
     class="hormozi-subtitles-container"
-    style="font-size: {fontSize};"
+    class:dragging={isDragging}
+    style="font-size: {fontSize}; left: {position.x}%; bottom: {position.y}%;"
+    on:mousedown={handleMouseDown}
+    role="button"
+    tabindex="0"
+    aria-label="Drag to reposition subtitles"
   >
     <div class="hormozi-subtitles-wrapper">
       {#each visibleWords as wordData, localIndex (`${wordData.start}-${wordData.word}`)}
@@ -192,19 +248,23 @@
         </span>
       {/each}
     </div>
+    
+    <!-- Position indicator -->
+    <div class="position-indicator">
+      {Math.round(position.x)}%, {Math.round(position.y)}%
+    </div>
   </div>
 {/if}
 
 <style>
   .hormozi-subtitles-container {
     position: absolute;
-    bottom: 12%;
-    left: 50%;
+    /* left and bottom set via inline styles */
     transform: translateX(-50%);
     width: 95%;
     max-width: 900px;
     text-align: center;
-    pointer-events: none;
+    cursor: grab;
     z-index: 100;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -215,6 +275,14 @@
     text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
   }
 
+  .hormozi-subtitles-container:hover .position-indicator {
+    opacity: 1;
+  }
+
+  .hormozi-subtitles-container.dragging {
+    cursor: grabbing;
+  }
+
   .hormozi-subtitles-wrapper {
     display: flex;
     flex-wrap: wrap;
@@ -222,6 +290,7 @@
     align-items: center;
     gap: 0.2em;
     padding: 0.3em;
+    pointer-events: none;
   }
 
   .hormozi-word {
@@ -235,7 +304,8 @@
     backface-visibility: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 0.6em;
+    font-size: 0.8em;
+    pointer-events: none;
   }
 
   .hormozi-word.active {
@@ -268,9 +338,39 @@
     animation: wordPop 0.15s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
   }
 
+  .position-indicator {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: nowrap;
+    font-weight: normal;
+  }
+
+  /* Fullscreen adjustments */
+  :global(:fullscreen) .hormozi-subtitles-container,
+  :global(:-webkit-full-screen) .hormozi-subtitles-container,
+  :global(:-moz-full-screen) .hormozi-subtitles-container {
+    font-size: clamp(40px, 5vw, 80px) !important;
+    max-width: 1200px;
+  }
+
+  :global(:fullscreen) .hormozi-word,
+  :global(:-webkit-full-screen) .hormozi-word,
+  :global(:-moz-full-screen) .hormozi-word {
+    font-size: 1em !important;
+  }
+
   @media (max-width: 768px) {
     .hormozi-subtitles-container {
-      bottom: 18%;
       width: 98%;
     }
     
@@ -279,7 +379,7 @@
     }
 
     .hormozi-word {
-      font-size: 0.5em;
+      font-size: 0.6em;
     }
   }
 

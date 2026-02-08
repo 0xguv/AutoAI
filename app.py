@@ -152,6 +152,8 @@ class VideoProcessingJob(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     resolution = db.Column(db.String(20), nullable=True) # Store selected resolution
     language = db.Column(db.String(10), nullable=True) # Store selected language
+    subtitle_pos_x = db.Column(db.Float, default=50.0) # Subtitle X position (percentage)
+    subtitle_pos_y = db.Column(db.Float, default=15.0) # Subtitle Y position (percentage)
 
     def __repr__(self):
         return f"<VideoProcessingJob {self.id} - {self.status}>"
@@ -556,17 +558,18 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
     with app.app_context():
         current_rq_job_id = get_current_job().id
         user = User.query.get(user_id)
+        job_entry = VideoProcessingJob.query.get(original_job_id)
+        
         if not user:
             app.logger.error(f"User with ID {user_id} not found for burning job {original_job_id}")
             return {"status": "failed", "error": "User not found"}
 
-        app.logger.info(f"Starting video burning with red word boxes for original job {original_job_id}, user {user_id}, file {filename_for_output}")
+        app.logger.info(f"Starting video burning with Hormozi-style subtitles for original job {original_job_id}, user {user_id}, file {filename_for_output}")
         
         try:
             # Check if original video file still exists
             if not os.path.exists(original_video_filepath):
                 app.logger.error(f"Original video file not found for burning job {original_job_id}: {original_video_filepath}")
-                job_entry = VideoProcessingJob.query.get(original_job_id)
                 if job_entry:
                     job_entry.status = 'failed'
                     db.session.commit()
@@ -577,7 +580,6 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             # Check if SRT file exists
             if not os.path.exists(srt_filepath):
                 app.logger.error(f"SRT file not found for burning job {original_job_id}: {srt_filepath}")
-                job_entry = VideoProcessingJob.query.get(original_job_id)
                 if job_entry:
                     job_entry.status = 'failed'
                     db.session.commit()
@@ -587,6 +589,11 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
 
             output_video_filename = f"subtitled_{filename_for_output}"
             output_video_filepath = os.path.join(app.config['UPLOAD_FOLDER'], output_video_filename)
+            
+            # Get subtitle position from database
+            subtitle_x = job_entry.subtitle_pos_x if job_entry else 50.0
+            subtitle_y = job_entry.subtitle_pos_y if job_entry else 15.0
+            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}%")
             
             # Parse SRT file to get word-level timing
             def parse_srt(srt_content):
@@ -623,9 +630,9 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             captions = parse_srt(srt_content)
             app.logger.info(f"Parsed {len(captions)} captions from SRT")
             
-            # Build drawtext filters for each word with red boxes
-            # Using variable timing based on word length (matching frontend HormoziSubtitles)
-            drawtext_filters = []
+            # Build word timestamps with variable timing (matching frontend)
+            max_words_per_line = 3
+            word_timestamps = []
             
             for caption in captions:
                 words = caption['text'].split()
@@ -636,46 +643,90 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 end_sec = srt_time_to_seconds(caption['end'])
                 duration = end_sec - start_sec
                 
-                # Calculate word weights based on length (longer words = more time)
-                # Matching frontend logic: weight = max(1, length * 0.5)
+                # Calculate word weights based on length
                 word_weights = [max(1, len(word) * 0.5) for word in words]
                 total_weight = sum(word_weights)
                 
-                # Build drawtext filters for each word
                 current_time = start_sec
                 
                 for i, word in enumerate(words):
-                    # Calculate word duration based on weight
                     word_duration = (word_weights[i] / total_weight) * duration
                     word_start = current_time
                     word_end = current_time + word_duration
                     current_time = word_end
                     
-                    # Escape special characters for FFmpeg drawtext
+                    word_timestamps.append({
+                        'word': word,
+                        'start': word_start,
+                        'end': word_end,
+                        'clean_word': re.sub(r'[^\w\s]', '', word)
+                    })
+            
+            # Build drawtext filters - Hormozi style: show 3 words at a time, highlight active
+            drawtext_filters = []
+            
+            # Group words into chunks of 3
+            for chunk_start in range(0, len(word_timestamps), max_words_per_line):
+                chunk = word_timestamps[chunk_start:chunk_start + max_words_per_line]
+                chunk_end = min(chunk_start + max_words_per_line, len(word_timestamps))
+                
+                # Calculate chunk time range
+                chunk_start_time = chunk[0]['start']
+                chunk_end_time = chunk[-1]['end']
+                
+                # Build text for this chunk (all words visible)
+                chunk_words = [w['word'] for w in chunk]
+                full_text = ' '.join(chunk_words)
+                
+                # Escape the full text
+                escaped_full_text = full_text.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                
+                # Create base drawtext for the full chunk (inactive style - white text, no background)
+                # This shows all words in the chunk
+                base_filter = (
+                    f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
+                    f'text="{escaped_full_text}":'
+                    f'fontcolor=white:'
+                    f'fontsize=48:'
+                    f'x=(w-text_w)/2:'
+                    f'y=h*{subtitle_y/100}:'
+                    f'enable=between(t\\,{chunk_start_time:.3f}\\,{chunk_end_time:.3f})'
+                )
+                drawtext_filters.append(base_filter)
+                
+                # For each word in chunk, create overlay with red background when active
+                for word_idx_in_chunk, word_data in enumerate(chunk):
+                    word = word_data['word']
+                    word_start = word_data['start']
+                    word_end = word_data['end']
+                    
+                    # Calculate position offset for this word
+                    # This is approximate - centering the individual word
+                    # We'll draw just this word with red background over the base text
                     escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
                     
-                    # Create drawtext filter with red box
-                    drawtext_filter = (
+                    # Create overlay filter for active word with red background
+                    active_filter = (
                         f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
                         f'text="{escaped_word}":'
                         f'fontcolor=white:'
-                        f'fontsize=36:'
+                        f'fontsize=48:'
                         f'box=1:'
                         f'boxcolor=red@0.9:'
-                        f'boxborderw=8:'
+                        f'boxborderw=10:'
                         f'x=(w-text_w)/2:'
-                        f'y=h*0.85:'
+                        f'y=h*{subtitle_y/100}:'
                         f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
                     )
-                    drawtext_filters.append(drawtext_filter)
+                    drawtext_filters.append(active_filter)
             
-            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters for words")
+            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters")
             
             # Build FFmpeg command
-            vf_filters = drawtext_filters[:50]  # Limit to 50 words per video for performance (FFmpeg limit workaround)
+            vf_filters = drawtext_filters[:60]  # Limit filters
             
-            if len(drawtext_filters) > 50:
-                app.logger.warning(f"Limiting to first 50 words due to filter complexity. Total words: {len(drawtext_filters)}")
+            if len(drawtext_filters) > 60:
+                app.logger.warning(f"Limiting to first 60 filters. Total: {len(drawtext_filters)}")
             
             if resolution != 'original':
                 width, height = resolution.split('x')
@@ -692,7 +743,6 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             ]
             
             app.logger.info(f"Running FFmpeg burn command for job {original_job_id}")
-            app.logger.info(f"Command: {' '.join(ffmpeg_burn_command)}")
             
             result = subprocess.run(
                 ffmpeg_burn_command,
@@ -1040,6 +1090,11 @@ def save_and_burn():
         edited_srt_filepath = job_entry.generated_srt_filepath # Use the same file for now
         with open(edited_srt_filepath, "w", encoding="utf-8") as f:
             f.write(srt_content)
+        
+        # Store subtitle position if provided
+        if positional_data:
+            job_entry.subtitle_pos_x = positional_data.get('x', 50.0)
+            job_entry.subtitle_pos_y = positional_data.get('y', 15.0)
         
         job_entry.edited_srt_filepath = edited_srt_filepath # Point to the edited SRT (which is the same file)
         job_entry.status = 'burning'
