@@ -602,23 +602,11 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 app.logger.info(f"Video dimensions: {video_width}x{video_height}")
             except Exception as e:
                 app.logger.warning(f"Could not get video dimensions: {e}, using defaults")
-                video_width, video_height = 1080, 1920  # Default to vertical video
+                video_width, video_height = 1080, 1920
             
-            # Get subtitle position from database
-            subtitle_x = job_entry.subtitle_pos_x if job_entry else 50.0
-            subtitle_y = job_entry.subtitle_pos_y if job_entry else 15.0
-            
-            # Calculate font size as percentage of video width (8% of width for readability)
-            font_size = int(video_width * 0.075)
-            # Ensure font isn't too small or too large
-            font_size = max(24, min(font_size, 72))
-            
-            # Calculate Y position from bottom (convert percentage to pixels from top)
-            # subtitle_y is % from bottom, so y_pos = height - (height * subtitle_y / 100)
-            y_position = int(video_height * (subtitle_y / 100))
-            
-            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}% ({y_position}px from bottom)")
-            app.logger.info(f"Font size: {font_size}px (based on video width {video_width})")
+            # Get subtitle position from database (as percentages)
+            subtitle_x_pct = job_entry.subtitle_pos_x if job_entry else 50.0
+            subtitle_y_pct = job_entry.subtitle_pos_y if job_entry else 15.0
             
             # Parse SRT file to get word-level timing
             def parse_srt(srt_content):
@@ -628,7 +616,6 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 for block in blocks:
                     lines = block.strip().split('\n')
                     if len(lines) >= 3:
-                        # Parse time line
                         time_line = lines[1]
                         time_match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', time_line)
                         if time_match:
@@ -655,8 +642,7 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             captions = parse_srt(srt_content)
             app.logger.info(f"Parsed {len(captions)} captions from SRT")
             
-            # Build word timestamps with variable timing (matching frontend)
-            max_words_per_line = 3
+            # Build word timestamps with variable timing
             word_timestamps = []
             
             for caption in captions:
@@ -683,50 +669,75 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                     word_timestamps.append({
                         'word': word,
                         'start': word_start,
-                        'end': word_end,
-                        'clean_word': re.sub(r'[^\w\s]', '', word)
+                        'end': word_end
                     })
             
-            # Build drawtext filters - Single word at a time to avoid ghosting
-            # Using calculated font size based on video dimensions
-            drawtext_filters = []
+            # Group words into chunks (3 words per chunk like preview)
+            max_words_per_chunk = 3
+            word_chunks = []
+            for i in range(0, len(word_timestamps), max_words_per_chunk):
+                chunk = word_timestamps[i:i + max_words_per_chunk]
+                word_chunks.append(chunk)
             
-            # Limit total words to avoid FFmpeg complexity
-            max_words = 50
-            word_timestamps_limited = word_timestamps[:max_words]
+            # Limit chunks to avoid FFmpeg complexity
+            max_chunks = 20
+            word_chunks = word_chunks[:max_chunks]
             
-            for word_data in word_timestamps_limited:
-                word = word_data['word']
-                word_start = word_data['start']
-                word_end = word_data['end']
+            # Build filters - Clear-and-Draw approach with proper layering
+            # Each chunk: Base text (all words) + Highlight (active word)
+            filter_parts = []
+            
+            for chunk in word_chunks:
+                if not chunk:
+                    continue
                 
-                # Escape special characters for FFmpeg
-                # Use double quotes for text parameter, escape double quotes in word
-                escaped_word = word.replace('\\', '\\\\\\\\').replace('"', '\\"').replace(':', '\\:')
+                chunk_start = chunk[0]['start']
+                chunk_end = chunk[-1]['end']
                 
-                # Create drawtext filter with:
-                # - Dynamic font size based on video width
-                # - Centered alignment
-                # - Fixed Y position from bottom
-                # - Box background (Hormozi style)
-                drawtext_filter = (
+                # Build full chunk text
+                full_text = ' '.join([w['word'] for w in chunk])
+                escaped_full = full_text.replace('\\', '\\\\').replace("'", "'\\''").replace(':', '\\:')
+                
+                # Base layer: All words in white (no background) - acts as "clear" for this time period
+                base_filter = (
                     f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                    f'text="{escaped_word}":'
+                    f"text='{escaped_full}':"
                     f"fontcolor=white:"
-                    f"fontsize={font_size}:"
-                    f"box=1:"
-                    f"boxcolor=red@0.9:"
-                    f"boxborderw=8:"
+                    f"fontsize={int(video_width * 0.08)}:"
                     f"x=(w-text_w)/2:"
-                    f"y=h-{y_position}:"
-                    f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
+                    f"y=h*{(100 - subtitle_y_pct) / 100}:"
+                    f"enable=between(t\\,{chunk_start:.3f}\\,{chunk_end:.3f})"
                 )
-                drawtext_filters.append(drawtext_filter)
+                filter_parts.append(base_filter)
+                
+                # Highlight layers: Each word with red background during its time
+                for word_data in chunk:
+                    word = word_data['word']
+                    word_start = word_data['start']
+                    word_end = word_data['end']
+                    
+                    escaped_word = word.replace('\\', '\\\\').replace("'", "'\\''").replace(':', '\\:')
+                    
+                    # Active word with red box - drawn ON TOP of base
+                    highlight_filter = (
+                        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                        f"text='{escaped_word}':"
+                        f"fontcolor=white:"
+                        f"fontsize={int(video_width * 0.08)}:"
+                        f"box=1:"
+                        f"boxcolor=red@0.95:"
+                        f"boxborderw=10:"
+                        f"x=(w-text_w)/2:"
+                        f"y=h*{(100 - subtitle_y_pct) / 100}:"
+                        f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
+                    )
+                    filter_parts.append(highlight_filter)
             
-            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters (font_size={font_size}px)")
+            app.logger.info(f"Created {len(filter_parts)} filter parts for {len(word_chunks)} chunks")
+            app.logger.info(f"Position: x={subtitle_x_pct}%, y={subtitle_y_pct}% from bottom")
             
-            # Build FFmpeg command
-            vf_string = ','.join(drawtext_filters)
+            # Build FFmpeg command with filter_complex for proper layering
+            vf_string = ','.join(filter_parts)
             
             if resolution != 'original':
                 width, height = resolution.split('x')
@@ -736,14 +747,13 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 "ffmpeg",
                 "-i", original_video_filepath,
                 "-y",
-                "-vf", vf_string,  # Use -vf instead of -filter_complex for simpler chain
+                "-vf", vf_string,
                 "-preset", "ultrafast",
                 "-threads", "2",
                 output_video_filepath
             ]
             
             app.logger.info(f"Running FFmpeg burn command for job {original_job_id}")
-            app.logger.info(f"Filter chain has {len(drawtext_filters)} parts")
             
             result = subprocess.run(
                 ffmpeg_burn_command,
