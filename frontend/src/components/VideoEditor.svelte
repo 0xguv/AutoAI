@@ -23,6 +23,11 @@
   let subtitleSize = { width: 300, height: 60 }
   let isResizing = false
   
+  // Export state
+  let isExporting = false
+  let exportStatus = ''
+  let resolution = 'original'
+  
   function togglePlay() {
     if (videoElement) {
       if (isPlaying) {
@@ -144,6 +149,7 @@
       if (data.status === 'success') {
         videoUrl = data.video_url
         captions = parseSrt(data.srt_content)
+        resolution = data.resolution || 'original'
       } else {
         throw new Error(data.message || 'Failed to load editor data')
       }
@@ -165,6 +171,71 @@
       // Active state is now handled by handleTimeUpdate
     }
   }
+  
+  function secondsToSrtTime(seconds) {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = Math.floor(seconds % 60)
+    const millis = Math.floor((seconds % 1) * 1000)
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${millis.toString().padStart(3, '0')}`
+  }
+
+  function generateSrtContent() {
+    return captions.map((caption, index) => {
+      return `${index + 1}\n${secondsToSrtTime(caption.start)} --> ${secondsToSrtTime(caption.end)}\n${caption.text}`
+    }).join('\n\n')
+  }
+
+  async function handleExport() {
+    isExporting = true
+    exportStatus = 'Saving subtitles...'
+    
+    try {
+      const srtContent = generateSrtContent()
+      const positionalData = {
+        x: subtitlePosition.x,
+        y: subtitlePosition.y,
+        width: subtitleSize.width,
+        height: subtitleSize.height
+      }
+      
+      const response = await fetch('/save_and_burn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          job_id: jobId,
+          srt_content: srtContent,
+          positional_data: positionalData,
+          resolution: resolution
+        })
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.status === 'success') {
+        exportStatus = 'Video processing started! Redirecting...'
+        // Redirect to home or show download link
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 2000)
+      } else {
+        throw new Error(data.message || 'Failed to start export')
+      }
+    } catch (e) {
+      console.error('Error exporting video:', e)
+      exportStatus = `Export failed: ${e.message}`
+    } finally {
+      setTimeout(() => {
+        isExporting = false
+      }, 3000)
+    }
+  }
 </script>
 
 <svelte:window on:mousemove={handleMouseMove} on:mouseup={handleMouseUp} />
@@ -174,8 +245,15 @@
   <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
     <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
     <div class="flex items-center space-x-3">
-      <button class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors">
-        Export Video
+      {#if exportStatus}
+        <span class="text-sm {exportStatus.includes('failed') ? 'text-red-600' : 'text-green-600'}">{exportStatus}</span>
+      {/if}
+      <button 
+        class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        on:click={handleExport}
+        disabled={isExporting}
+      >
+        {isExporting ? 'Exporting...' : 'Export Video'}
       </button>
     </div>
   </header>

@@ -1,5 +1,9 @@
 <script>
   import { Home, Settings, User, LogOut, Video } from 'lucide-svelte'
+  
+  function handleLogout() {
+    window.location.href = '/logout'
+  }
 </script>
 
 <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 shadow-sm">
@@ -13,29 +17,33 @@
   <!-- Navigation -->
   <nav class="flex-1 flex flex-col items-center space-y-2 w-full">
     <a 
-      href="#" 
+      href="/" 
       class="w-12 h-12 rounded-xl bg-gray-100 text-gray-900 flex items-center justify-center hover:bg-gray-200 transition-colors"
+      title="Home"
     >
       <Home class="w-5 h-5" />
     </a>
     
     <a 
-      href="#" 
+      href="/editor-new" 
       class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
+      title="New Editor"
     >
       <Video class="w-5 h-5" />
     </a>
     
     <a 
-      href="#" 
+      href="/profile" 
       class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
+      title="Profile"
     >
       <User class="w-5 h-5" />
     </a>
     
     <a 
-      href="#" 
+      href="/" 
       class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
+      title="Dashboard"
     >
       <Settings class="w-5 h-5" />
     </a>
@@ -45,6 +53,8 @@
   <div class="mt-auto w-full flex flex-col items-center space-y-2">
     <button 
       class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-colors"
+      on:click={handleLogout}
+      title="Logout"
     >
       <LogOut class="w-5 h-5" />
     </button>
