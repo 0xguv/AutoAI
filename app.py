@@ -593,7 +593,9 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             # Get subtitle position from database
             subtitle_x = job_entry.subtitle_pos_x if job_entry else 50.0
             subtitle_y = job_entry.subtitle_pos_y if job_entry else 15.0
-            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}%")
+            # Convert bottom percentage to top coordinate (FFmpeg y=0 is top, y=h is bottom)
+            subtitle_y_ffmpeg = round((100 - subtitle_y) / 100, 2)
+            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}% (FFmpeg: y=h*{subtitle_y_ffmpeg})")
             
             # Parse SRT file to get word-level timing
             def parse_srt(srt_content):
@@ -662,71 +664,43 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'clean_word': re.sub(r'[^\w\s]', '', word)
                     })
             
-            # Build drawtext filters - Hormozi style: show 3 words at a time, highlight active
+            # Build drawtext filters - Word by word with red boxes (matching old style but with position)
             drawtext_filters = []
             
-            # Group words into chunks of 3
-            for chunk_start in range(0, len(word_timestamps), max_words_per_line):
-                chunk = word_timestamps[chunk_start:chunk_start + max_words_per_line]
-                chunk_end = min(chunk_start + max_words_per_line, len(word_timestamps))
-                
-                # Calculate chunk time range
-                chunk_start_time = chunk[0]['start']
-                chunk_end_time = chunk[-1]['end']
-                
-                # Build text for this chunk (all words visible)
-                chunk_words = [w['word'] for w in chunk]
-                full_text = ' '.join(chunk_words)
-                
-                # Escape the full text
-                escaped_full_text = full_text.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
-                
-                # Create base drawtext for the full chunk (inactive style - white text, no background)
-                # This shows all words in the chunk
-                base_filter = (
-                    f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                    f'text="{escaped_full_text}":'
-                    f'fontcolor=white:'
-                    f'fontsize=48:'
-                    f'x=(w-text_w)/2:'
-                    f'y=h*{subtitle_y/100}:'
-                    f'enable=between(t\\,{chunk_start_time:.3f}\\,{chunk_end_time:.3f})'
-                )
-                drawtext_filters.append(base_filter)
-                
-                # For each word in chunk, create overlay with red background when active
-                for word_idx_in_chunk, word_data in enumerate(chunk):
-                    word = word_data['word']
-                    word_start = word_data['start']
-                    word_end = word_data['end']
-                    
-                    # Calculate position offset for this word
-                    # This is approximate - centering the individual word
-                    # We'll draw just this word with red background over the base text
-                    escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
-                    
-                    # Create overlay filter for active word with red background
-                    active_filter = (
-                        f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                        f'text="{escaped_word}":'
-                        f'fontcolor=white:'
-                        f'fontsize=48:'
-                        f'box=1:'
-                        f'boxcolor=red@0.9:'
-                        f'boxborderw=10:'
-                        f'x=(w-text_w)/2:'
-                        f'y=h*{subtitle_y/100}:'
-                        f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
-                    )
-                    drawtext_filters.append(active_filter)
+            # Limit to first 50 words to avoid FFmpeg complexity issues
+            max_words = 50
+            word_timestamps_limited = word_timestamps[:max_words]
             
-            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters")
+            for word_data in word_timestamps_limited:
+                word = word_data['word']
+                word_start = word_data['start']
+                word_end = word_data['end']
+                
+                # Escape special characters for FFmpeg drawtext
+                escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                
+                # Create drawtext filter with red box at specified position
+                drawtext_filter = (
+                    f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
+                    f'text="{escaped_word}":'
+                    f'fontcolor=white:'
+                    f'fontsize=36:'
+                    f'box=1:'
+                    f'boxcolor=red@0.9:'
+                    f'boxborderw=8:'
+                    f'x=(w-text_w)/2:'
+                    f'y=h*{subtitle_y_ffmpeg}:'
+                    f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
+                )
+                drawtext_filters.append(drawtext_filter)
+            
+            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters (limited to {max_words})")
             
             # Build FFmpeg command
-            vf_filters = drawtext_filters[:60]  # Limit filters
+            vf_filters = drawtext_filters
             
-            if len(drawtext_filters) > 60:
-                app.logger.warning(f"Limiting to first 60 filters. Total: {len(drawtext_filters)}")
+            if len(word_timestamps) > max_words:
+                app.logger.warning(f"Limited to first {max_words} words. Total words: {len(word_timestamps)}")
             
             if resolution != 'original':
                 width, height = resolution.split('x')
