@@ -26,6 +26,8 @@
   // Export state
   let isExporting = false
   let exportStatus = ''
+  let exportComplete = false
+  let downloadUrl = ''
   let resolution = 'original'
   
   function togglePlay() {
@@ -61,7 +63,7 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
   
-  // Fixed drag handler - centers subtitle on cursor
+  // Improved drag handler - smoother dragging
   function handleSubtitleMouseDown(e) {
     e.preventDefault()
     e.stopPropagation()
@@ -73,10 +75,15 @@
     const rect = subtitleRef.getBoundingClientRect()
     const parentRect = subtitleRef.parentElement.getBoundingClientRect()
     
-    // Calculate offset from center of subtitle to cursor
+    // Store the initial offset from the center of the subtitle
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+    
     dragStart = {
-      offsetX: e.clientX - (rect.left + rect.width / 2),
-      offsetY: e.clientY - (rect.top + rect.height / 2),
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      subtitleX: subtitlePosition.x,
+      subtitleY: subtitlePosition.y,
       parentWidth: parentRect.width,
       parentHeight: parentRect.height
     }
@@ -87,17 +94,21 @@
     
     const parentRect = subtitleRef.parentElement.getBoundingClientRect()
     
-    // Calculate new position relative to parent center
-    const centerX = e.clientX - dragStart.offsetX - parentRect.left
-    const centerY = e.clientY - dragStart.offsetY - parentRect.top
+    // Calculate delta from drag start
+    const deltaX = e.clientX - dragStart.mouseX
+    const deltaY = e.clientY - dragStart.mouseY
     
-    // Convert to percentage
-    const x = (centerX / parentRect.width) * 100
-    const y = 100 - ((centerY / parentRect.height) * 100)
+    // Convert delta to percentage
+    const deltaXPercent = (deltaX / parentRect.width) * 100
+    const deltaYPercent = (deltaY / parentRect.height) * 100
+    
+    // Apply delta to original position
+    let newX = dragStart.subtitleX + deltaXPercent
+    let newY = dragStart.subtitleY - deltaYPercent
     
     // Constrain to keep subtitle visible
-    subtitlePosition.x = Math.max(5, Math.min(95, x))
-    subtitlePosition.y = Math.max(5, Math.min(95, y))
+    subtitlePosition.x = Math.max(5, Math.min(95, newX))
+    subtitlePosition.y = Math.max(5, Math.min(95, newY))
   }
   
   function handleMouseUp() {
@@ -253,6 +264,7 @@
   async function handleExport() {
     isExporting = true
     exportStatus = 'Saving subtitles...'
+    exportComplete = false
     
     try {
       const srtContent = generateSrtContent()
@@ -281,26 +293,23 @@
       const data = await response.json()
       
       if (data.status === 'success') {
-        exportStatus = 'Video burning started. Please wait...'
+        exportStatus = 'Video burning in progress...'
         
         // Poll for burning completion
         const burnResult = await pollBurnStatus(data.job_id)
         
-        exportStatus = 'Export complete! Redirecting...'
-        
-        setTimeout(() => {
-          window.location.href = '/'
-        }, 2000)
+        exportComplete = true
+        exportStatus = 'Export complete!'
+        downloadUrl = burnResult.result?.video_url || ''
       } else {
         throw new Error(data.message || 'Failed to start export')
       }
     } catch (e) {
       console.error('Error exporting video:', e)
       exportStatus = `Export failed: ${e.message}`
+      exportComplete = false
     } finally {
-      setTimeout(() => {
-        isExporting = false
-      }, 5000)
+      isExporting = false
     }
   }
   
@@ -315,16 +324,23 @@
   <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
     <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
     <div class="flex items-center space-x-3">
-      {#if exportStatus}
-        <span class="text-sm {exportStatus.includes('failed') ? 'text-red-600' : 'text-green-600'}">{exportStatus}</span>
+      {#if exportComplete && downloadUrl}
+        <a href={downloadUrl} class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center space-x-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download Video</span>
+        </a>
+      {:else}
+        {#if exportStatus}
+          <span class="text-sm {exportStatus.includes('failed') ? 'text-red-600' : 'text-green-600'}">{exportStatus}</span>
+        {/if}
+        <button 
+          class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          on:click={handleExport}
+          disabled={isExporting}
+        >
+          {isExporting ? 'Exporting...' : 'Export Video'}
+        </button>
       {/if}
-      <button 
-        class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        on:click={handleExport}
-        disabled={isExporting}
-      >
-        {isExporting ? 'Exporting...' : 'Export Video'}
-      </button>
     </div>
   </header>
 
@@ -339,7 +355,7 @@
       <div class="flex-1 flex flex-col bg-gray-900">
         <!-- Video Container -->
         <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
-          <div class="relative h-full max-h-[calc(100vh-280px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
+          <div class="relative h-full max-h-[calc(100vh-300px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
             <video
               bind:this={videoElement}
               class="w-full h-full object-contain"
@@ -351,7 +367,7 @@
               <track kind="captions" />
             </video>
             
-            <!-- Red Word Boxes Subtitle Overlay -->
+            <!-- Animated Red Word Boxes Subtitle Overlay -->
             {#if subtitleWords.length > 0}
               <div
                 bind:this={subtitleRef}
@@ -361,8 +377,11 @@
                 role="button"
                 tabindex="0"
               >
-                {#each subtitleWords as word}
-                  <span class="bg-red-600 text-white px-2 py-1 rounded text-lg font-medium whitespace-nowrap">
+                {#each subtitleWords as word, i}
+                  <span 
+                    class="bg-red-600 text-white px-2 py-1 rounded text-lg font-medium whitespace-nowrap animate-pop"
+                    style="animation-delay: {i * 100}ms;"
+                  >
                     {word}
                   </span>
                 {/each}
@@ -378,8 +397,8 @@
         
         <!-- Controls Section -->
         <div class="flex flex-col items-center pb-4 px-4 space-y-3">
-          <!-- Progress Bar / Timeline -->
-          <div class="w-full max-w-lg">
+          <!-- Progress Bar / Timeline - narrower than controls -->
+          <div class="w-full max-w-md">
             <div 
               class="h-2 bg-gray-700 rounded-full cursor-pointer relative overflow-hidden"
               on:click={handleProgressClick}
@@ -399,8 +418,8 @@
             </div>
           </div>
           
-          <!-- Video Controls -->
-          <div class="flex items-center space-x-4 bg-gray-800 rounded-full px-6 py-3">
+          <!-- Video Controls - wider than progress bar -->
+          <div class="flex items-center space-x-4 bg-gray-800 rounded-full px-8 py-3">
             <button 
               class="text-gray-400 hover:text-white transition-colors"
               on:click={() => videoElement && (videoElement.currentTime -= 5)}
@@ -470,5 +489,24 @@
   .select-none {
     user-select: none;
     -webkit-user-select: none;
+  }
+  
+  @keyframes popIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.5) translateY(10px);
+    }
+    50% {
+      transform: scale(1.1) translateY(-2px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  
+  .animate-pop {
+    animation: popIn 0.4s ease-out forwards;
+    opacity: 0;
   }
 </style>

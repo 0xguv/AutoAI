@@ -51,50 +51,83 @@
 
 {% block page_scripts %}
     <script>
-        fetch('/api/user_usage')
-            .then(response => response.json())
-            .then(data => {
-                const ctx = document.getElementById('usageChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: data.dates,
-                        datasets: [{
-                            label: 'Videos Processed',
-                            data: data.videos_processed,
-                            backgroundColor: '#10B981',
-                            borderColor: '#059669',
-                            borderWidth: 1,
-                            borderRadius: 5
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { display: false },
-                            title: { display: false }
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('usageChart');
+            if (!canvas) {
+                console.error('Chart canvas not found');
+                return;
+            }
+            
+            fetch('/api/user_usage')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Usage data:', data);
+                    
+                    // Handle empty data
+                    if (!data.dates || data.dates.length === 0) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.font = '14px Inter, sans-serif';
+                        ctx.fillStyle = '#6B7280';
+                        ctx.textAlign = 'center';
+                        ctx.fillText('No usage data available yet', canvas.width / 2, canvas.height / 2);
+                        return;
+                    }
+                    
+                    const ctx = canvas.getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: data.dates,
+                            datasets: [{
+                                label: 'Videos Processed',
+                                data: data.videos_processed,
+                                backgroundColor: '#10B981',
+                                borderColor: '#059669',
+                                borderWidth: 1,
+                                borderRadius: 5
+                            }]
                         },
-                        scales: {
-                            x: {
-                                grid: { display: false },
-                                ticks: {
-                                    color: '#4B5563',
-                                    font: { family: 'Inter, sans-serif' }
-                                }
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false },
+                                title: { display: false }
                             },
-                            y: {
-                                beginAtZero: true,
-                                grid: { color: '#E5E7EB' },
-                                ticks: {
-                                    color: '#4B5563',
-                                    font: { family: 'Inter, sans-serif' }
+                            scales: {
+                                x: {
+                                    grid: { display: false },
+                                    ticks: {
+                                        color: '#4B5563',
+                                        font: { family: 'Inter, sans-serif' }
+                                    }
+                                },
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#E5E7EB' },
+                                    ticks: {
+                                        color: '#4B5563',
+                                        font: { family: 'Inter, sans-serif' },
+                                        stepSize: 1
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching usage data:', error);
+                    const ctx = canvas.getContext('2d');
+                    ctx.font = '14px Inter, sans-serif';
+                    ctx.fillStyle = '#EF4444';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Error loading chart data', canvas.width / 2, canvas.height / 2);
                 });
-            })
-            .catch(error => console.error('Error fetching usage data:', error));
+        });
     </script>
 {% endblock %}
