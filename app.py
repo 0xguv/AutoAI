@@ -664,56 +664,90 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'clean_word': re.sub(r'[^\w\s]', '', word)
                     })
             
-            # Build drawtext filters - Simple reliable approach: word by word with red box
-            drawtext_filters = []
+            # Build drawtext filters - Hormozi style: chunk-based with active word highlighting
+            # This matches the preview which shows 3 words with the active one highlighted
+            max_words_per_chunk = 3
             
-            # Limit to avoid FFmpeg complexity issues
-            max_words = 50
-            word_timestamps_limited = word_timestamps[:max_words]
+            # Group words into chunks
+            word_chunks = []
+            for i in range(0, len(word_timestamps), max_words_per_chunk):
+                chunk = word_timestamps[i:i + max_words_per_chunk]
+                word_chunks.append(chunk)
             
-            for word_data in word_timestamps_limited:
-                word = word_data['word']
-                word_start = word_data['start']
-                word_end = word_data['end']
+            # Limit chunks to avoid FFmpeg complexity issues (max ~20 chunks = 60 words)
+            max_chunks = 20
+            word_chunks = word_chunks[:max_chunks]
+            
+            # Build filter graph using filter_complex for proper layering
+            filter_graph_parts = []
+            
+            for chunk_idx, chunk in enumerate(word_chunks):
+                if not chunk:
+                    continue
                 
-                # Escape special characters for FFmpeg drawtext
-                escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                chunk_start = chunk[0]['start']
+                chunk_end = chunk[-1]['end']
                 
-                # Create drawtext filter with red box at specified position
-                drawtext_filter = (
+                # Build full chunk text (all words visible)
+                full_text = ' '.join([w['word'] for w in chunk])
+                escaped_full = full_text.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                
+                # Base layer: show all words in white with slight transparency
+                base_filter = (
                     f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                    f'text="{escaped_word}":'
+                    f'text=\'{escaped_full}\':'
                     f'fontcolor=white:'
-                    f'fontsize=36:'
-                    f'box=1:'
-                    f'boxcolor=red@0.9:'
-                    f'boxborderw=8:'
+                    f'fontsize=38:'
                     f'x=(w-text_w)/2:'
                     f'y=h*{subtitle_y_ffmpeg}:'
-                    f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
+                    f'enable=between(t\\,{chunk_start:.3f}\\,{chunk_end:.3f})'
                 )
-                drawtext_filters.append(drawtext_filter)
+                filter_graph_parts.append(base_filter)
+                
+                # For each word in chunk, create highlight overlay
+                for word_data in chunk:
+                    word = word_data['word']
+                    word_start = word_data['start']
+                    word_end = word_data['end']
+                    
+                    escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                    
+                    # Active word with red background (drawn on top)
+                    highlight_filter = (
+                        f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
+                        f'text=\'{escaped_word}\':'
+                        f'fontcolor=white:'
+                        f'fontsize=38:'
+                        f'box=1:'
+                        f'boxcolor=#FF0000@0.95:'
+                        f'boxborderw=12:'
+                        f'x=(w-text_w)/2:'
+                        f'y=h*{subtitle_y_ffmpeg}:'
+                        f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
+                    )
+                    filter_graph_parts.append(highlight_filter)
             
-            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters (limited to {max_words})")
+            app.logger.info(f"Created {len(filter_graph_parts)} filter parts for {len(word_chunks)} chunks")
             
-            # Build FFmpeg command
-            vf_filters = drawtext_filters
+            # Build FFmpeg command with proper filter_complex
+            vf_string = ','.join(filter_graph_parts)
             
             if resolution != 'original':
                 width, height = resolution.split('x')
-                vf_filters.append(f"scale={width}x{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")
+                vf_string += f",scale={width}x{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
             
             ffmpeg_burn_command = [
                 "ffmpeg",
                 "-i", original_video_filepath,
                 "-y",
-                "-vf", ','.join(vf_filters),
+                "-filter_complex", vf_string,
                 "-preset", "ultrafast",
                 "-threads", "2",
                 output_video_filepath
             ]
             
             app.logger.info(f"Running FFmpeg burn command for job {original_job_id}")
+            app.logger.info(f"Filter chain has {len(filter_graph_parts)} parts")
             
             result = subprocess.run(
                 ffmpeg_burn_command,
