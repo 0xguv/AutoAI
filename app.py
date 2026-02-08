@@ -664,71 +664,37 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'clean_word': re.sub(r'[^\w\s]', '', word)
                     })
             
-            # Build drawtext filters - Hormozi style: show 3 words, highlight active one
-            # This matches the frontend preview style
+            # Build drawtext filters - Simple reliable approach: word by word with red box
             drawtext_filters = []
-            max_words_per_line = 3
             
-            # Group words into chunks of 3 (matching frontend)
-            word_chunks = []
-            for i in range(0, len(word_timestamps), max_words_per_line):
-                chunk = word_timestamps[i:i + max_words_per_line]
-                word_chunks.append(chunk)
+            # Limit to avoid FFmpeg complexity issues
+            max_words = 50
+            word_timestamps_limited = word_timestamps[:max_words]
             
-            # Build filters for each chunk
-            for chunk_index, chunk in enumerate(word_chunks):
-                if not chunk:
-                    continue
-                    
-                chunk_start_time = chunk[0]['start']
-                chunk_end_time = chunk[-1]['end']
+            for word_data in word_timestamps_limited:
+                word = word_data['word']
+                word_start = word_data['start']
+                word_end = word_data['end']
                 
-                # Build the full chunk text (all words visible)
-                chunk_words_text = ' '.join([w['word'] for w in chunk])
-                escaped_chunk_text = chunk_words_text.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                # Escape special characters for FFmpeg drawtext
+                escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
                 
-                # Base layer: all words in white (no background)
-                base_filter = (
+                # Create drawtext filter with red box at specified position
+                drawtext_filter = (
                     f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                    f'text="{escaped_chunk_text}":'
+                    f'text="{escaped_word}":'
                     f'fontcolor=white:'
-                    f'fontsize=42:'
+                    f'fontsize=36:'
+                    f'box=1:'
+                    f'boxcolor=red@0.9:'
+                    f'boxborderw=8:'
                     f'x=(w-text_w)/2:'
                     f'y=h*{subtitle_y_ffmpeg}:'
-                    f'enable=between(t\\,{chunk_start_time:.3f}\\,{chunk_end_time:.3f})'
+                    f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
                 )
-                drawtext_filters.append(base_filter)
-                
-                # For each word in chunk, create overlay with red background during its time
-                for word_idx, word_data in enumerate(chunk):
-                    word = word_data['word']
-                    word_start = word_data['start']
-                    word_end = word_data['end']
-                    
-                    escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
-                    
-                    # Active word overlay with red box
-                    active_filter = (
-                        f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                        f'text="{escaped_word}":'
-                        f'fontcolor=white:'
-                        f'fontsize=42:'
-                        f'box=1:'
-                        f'boxcolor=red@0.95:'
-                        f'boxborderw=10:'
-                        f'x=(w-text_w)/2:'
-                        f'y=h*{subtitle_y_ffmpeg}:'
-                        f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
-                    )
-                    drawtext_filters.append(active_filter)
+                drawtext_filters.append(drawtext_filter)
             
-            # Limit total filters to avoid FFmpeg issues
-            max_filters = 80
-            if len(drawtext_filters) > max_filters:
-                app.logger.warning(f"Limiting from {len(drawtext_filters)} to {max_filters} filters")
-                drawtext_filters = drawtext_filters[:max_filters]
-            
-            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters ({len(word_chunks)} chunks)")
+            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters (limited to {max_words})")
             
             # Build FFmpeg command
             vf_filters = drawtext_filters
