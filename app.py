@@ -672,109 +672,70 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'end': word_end
                     })
             
-            # Group words into phrases (3-5 words per phrase)
-            max_words_per_phrase = 4
+            # Build filters - Clear-and-Draw with phrase visibility
+            # Strategy: Show phrase of 3-4 words, highlight active word by showing it alone with box
+            max_words_per_phrase = 3
+            filter_parts = []
+            
+            # Group words into phrases
             phrases = []
             for i in range(0, len(word_timestamps), max_words_per_phrase):
                 phrase = word_timestamps[i:i + max_words_per_phrase]
                 phrases.append(phrase)
             
-            # Limit phrases to avoid FFmpeg complexity
-            max_phrases = 15
-            phrases = phrases[:max_phrases]
-            
-            # Build filters - Individual word positioning with unified phrase appearance
-            # Each word is positioned side-by-side to form the phrase
-            # Only the active word gets a red box
-            filter_parts = []
+            # Limit to avoid complexity
+            phrases = phrases[:20]
             
             for phrase in phrases:
                 if not phrase:
                     continue
                 
-                # Calculate phrase timing
                 phrase_start = phrase[0]['start']
                 phrase_end = phrase[-1]['end']
                 
-                # For each word in the phrase, position it side-by-side
-                # This creates a unified phrase layout where each word is independently controlled
-                cumulative_width = 0
+                # Build full phrase text
+                full_text = ' '.join([w['word'] for w in phrase])
+                escaped_full = full_text.replace('\\', '\\\\').replace("'", "'\''").replace(':', '\\:')
+                
+                # For each word in the phrase, create TWO states:
+                # 1. SHOW PHRASE: Show all words in white during inactive time
+                # 2. HIGHLIGHT: Show only active word with red box during its time
                 
                 for idx, word_data in enumerate(phrase):
                     word = word_data['word']
                     word_start = word_data['start']
                     word_end = word_data['end']
                     
-                    # Escape word for FFmpeg
                     escaped_word = word.replace('\\', '\\\\').replace("'", "'\''").replace(':', '\\:')
                     
-                    # Calculate word width estimation (rough approximation based on character count)
-                    char_width = int(video_width * 0.04)  # Approximate char width
-                    word_width = len(word) * char_width
-                    
-                    # Build the complete phrase width for centering
-                    total_phrase_width = sum(len(w['word']) for w in phrase) * char_width
-                    phrase_offset = (video_width - total_phrase_width) / 2
-                    
-                    # Position this word within the phrase
-                    word_x_offset = phrase_offset + cumulative_width
-                    cumulative_width += word_width + char_width  # Add spacing
-                    
-                    # Determine if this word is currently active
-                    is_active_start = word_start
-                    is_active_end = word_end
-                    
-                    # Draw the word with red box ONLY during its active time
-                    # During inactive time within the phrase, draw without box
-                    
-                    # ACTIVE state: word with red box
-                    active_filter = (
+                    # STATE 1: Show full phrase in white (NO red box) during this word's time
+                    # This shows context of all words
+                    phrase_filter = (
                         f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                        f"text='{escaped_word}':"
+                        f"text='{escaped_full}':"
                         f"fontcolor=white:"
-                        f"fontsize={int(video_width * 0.075)}:"
-                        f"box=1:"
-                        f"boxcolor=red@0.9:"
-                        f"boxborderw=8:"
-                        f"x={word_x_offset}:"
+                        f"fontsize={int(video_width * 0.07)}:"
+                        f"x=(w-text_w)/2:"
                         f"y=h*{(100 - subtitle_y_pct) / 100}:"
                         f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
                     )
-                    filter_parts.append(active_filter)
+                    filter_parts.append(phrase_filter)
                     
-                    # INACTIVE state: word without box during phrase time but not this word's time
-                    # Show word in white during the rest of the phrase duration
-                    if idx > 0:
-                        # Show from phrase start until this word's start
-                        inactive_start = phrase_start
-                        inactive_end = word_start
-                        if inactive_end > inactive_start:
-                            inactive_filter = (
-                                f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                                f"text='{escaped_word}':"
-                                f"fontcolor=white:"
-                                f"fontsize={int(video_width * 0.075)}:"
-                                f"x={word_x_offset}:"
-                                f"y=h*{(100 - subtitle_y_pct) / 100}:"
-                                f"enable=between(t\\,{inactive_start:.3f}\\,{inactive_end:.3f})"
-                            )
-                            filter_parts.append(inactive_filter)
-                    
-                    if idx < len(phrase) - 1:
-                        # Show from this word's end until phrase end
-                        inactive_start = word_end
-                        inactive_end = phrase_end
-                        if inactive_end > inactive_start:
-                            inactive_filter = (
-                                f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                                f"text='{escaped_word}':"
-                                f"fontcolor=white:"
-                                f"fontsize={int(video_width * 0.075)}:"
-                                f"x={word_x_offset}:"
-                                f"y=h*{(100 - subtitle_y_pct) / 100}:"
-                                f"enable=between(t\\,{inactive_start:.3f}\\,{inactive_end:.3f})"
-                            )
-                            filter_parts.append(inactive_filter)
+                    # STATE 2: Show ONLY the active word with red box (drawn ON TOP)
+                    # This creates the highlight effect
+                    highlight_filter = (
+                        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                        f"text='{escaped_word}':"
+                        f"fontcolor=white:"
+                        f"fontsize={int(video_width * 0.07)}:"
+                        f"box=1:"
+                        f"boxcolor=red@0.95:"
+                        f"boxborderw=10:"
+                        f"x=(w-text_w)/2:"
+                        f"y=h*{(100 - subtitle_y_pct) / 100}:"
+                        f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
+                    )
+                    filter_parts.append(highlight_filter)
             
             app.logger.info(f"Created {len(filter_parts)} filters for {len(phrases)} phrases")
             app.logger.info(f"Position: x={subtitle_x_pct}%, y={subtitle_y_pct}% from bottom")
