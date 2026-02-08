@@ -11,6 +11,7 @@
   let duration = 0
   let volume = 1
   let videoUrl = '' // To be loaded from API
+  let isFullscreen = false
   
   let loading = true
   let error = null
@@ -22,6 +23,7 @@
   let dragStart = { x: 0, y: 0 }
   let subtitleSize = { width: 300, height: 60 }
   let isResizing = false
+  let dragStartTime = 0
   
   // Export state
   let isExporting = false
@@ -62,13 +64,16 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
   
-  // Drag handlers for subtitle
+  // Drag handlers for subtitle - distinguish click from drag
   function handleSubtitleMouseDown(e) {
+    dragStartTime = Date.now()
+    
     if (e.target.classList.contains('resize-handle')) {
       isResizing = true
     } else {
       isDragging = true
     }
+    
     dragStart = { 
       x: e.clientX - (subtitlePosition.x / 100 * e.target.parentElement.offsetWidth),
       y: e.clientY - ((100 - subtitlePosition.y) / 100 * e.target.parentElement.offsetHeight)
@@ -92,9 +97,47 @@
     }
   }
   
-  function handleMouseUp() {
+  function handleMouseUp(e) {
+    const dragDuration = Date.now() - dragStartTime
+    
+    // If drag was very short (< 200ms), treat it as a click - don't change position
+    if (dragDuration < 200 && isDragging) {
+      // This was a click, not a drag - position already set in mousedown
+    }
+    
     isDragging = false
     isResizing = false
+  }
+  
+  // Fullscreen toggle
+  function toggleFullscreen() {
+    if (!videoElement) return
+    
+    if (!document.fullscreenElement) {
+      videoElement.requestFullscreen().then(() => {
+        isFullscreen = true
+      }).catch(err => {
+        console.error('Error attempting to enable fullscreen:', err)
+      })
+    } else {
+      document.exitFullscreen().then(() => {
+        isFullscreen = false
+      }).catch(err => {
+        console.error('Error attempting to exit fullscreen:', err)
+      })
+    }
+  }
+  
+  // Seek to position on progress bar click
+  function handleProgressClick(e) {
+    if (!videoElement || !duration) return
+    
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickPosition = (e.clientX - rect.left) / rect.width
+    const newTime = clickPosition * duration
+    
+    videoElement.currentTime = newTime
+    currentTime = newTime
   }
   
   // Captions data
@@ -186,6 +229,37 @@
     }).join('\n\n')
   }
 
+  async function pollBurnStatus(burnJobId) {
+    return new Promise((resolve, reject) => {
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/job_status/${burnJobId}`)
+          const data = await response.json()
+          
+          if (data.status === 'completed') {
+            clearInterval(pollInterval)
+            resolve(data)
+          } else if (data.status === 'failed') {
+            clearInterval(pollInterval)
+            reject(new Error(data.error || 'Burning failed'))
+          } else {
+            // Still processing
+            exportStatus = `Processing: ${data.progress_message || data.status}...`
+          }
+        } catch (e) {
+          clearInterval(pollInterval)
+          reject(e)
+        }
+      }, 3000) // Poll every 3 seconds
+      
+      // Timeout after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        reject(new Error('Export timed out'))
+      }, 600000)
+    })
+  }
+
   async function handleExport() {
     isExporting = true
     exportStatus = 'Saving subtitles...'
@@ -219,8 +293,14 @@
       const data = await response.json()
       
       if (data.status === 'success') {
-        exportStatus = 'Video processing started! Redirecting...'
-        // Redirect to home or show download link
+        exportStatus = 'Video burning started. Please wait...'
+        
+        // Poll for burning completion
+        const burnResult = await pollBurnStatus(data.job_id)
+        
+        exportStatus = 'Export complete! Redirecting...'
+        
+        // Redirect to home after successful export
         setTimeout(() => {
           window.location.href = '/'
         }, 2000)
@@ -233,7 +313,7 @@
     } finally {
       setTimeout(() => {
         isExporting = false
-      }, 3000)
+      }, 5000)
     }
   }
 </script>
@@ -268,14 +348,15 @@
       <!-- Video Player Section -->
       <div class="flex-1 flex flex-col items-center justify-center bg-gray-900 p-8">
         <!-- 9:16 Video Container -->
-        <div class="relative h-full max-h-[calc(100vh-280px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
+        <div class="relative h-full max-h-[calc(100vh-340px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
           <video
             bind:this={videoElement}
             class="w-full h-full object-contain"
             src={videoUrl}
             on:timeupdate={handleTimeUpdate}
             on:click={togglePlay}
-            controls
+            on:play={() => isPlaying = true}
+            on:pause={() => isPlaying = false}
           >
             <track kind="captions" />
           </video>
@@ -285,6 +366,8 @@
             class="absolute transform -translate-x-1/2 cursor-move no-select group"
             style="left: {subtitlePosition.x}%; bottom: {subtitlePosition.y}%;"
             on:mousedown={handleSubtitleMouseDown}
+            role="button"
+            tabindex="0"
           >
             <div 
               class="bg-black/80 text-white px-4 py-2 rounded-lg text-center min-w-[200px] border-2 border-transparent group-hover:border-green-400 transition-all"
@@ -310,7 +393,24 @@
           </div>
         </div>
         
-        <!-- Video Controls -->
+        <!-- Progress Bar / Timeline -->
+        <div class="w-full max-w-2xl mt-4 px-4">
+          <div 
+            class="h-2 bg-gray-700 rounded-full cursor-pointer relative overflow-hidden"
+            on:click={handleProgressClick}
+          >
+            <div 
+              class="h-full bg-green-500 rounded-full transition-all duration-100"
+              style="width: {(currentTime / (duration || 1)) * 100}%"
+            ></div>
+          </div>
+          <div class="flex justify-between text-xs text-gray-400 mt-1">
+            <span>{formatTime(currentTime)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+        
+        <!-- Video Controls (Bottom Only) -->
         <div class="mt-4 flex items-center space-x-4 bg-gray-800 rounded-full px-6 py-3">
           <button 
             class="text-gray-400 hover:text-white transition-colors"
@@ -356,7 +456,10 @@
             />
           </div>
           
-          <button class="text-gray-400 hover:text-white transition-colors ml-2">
+          <button 
+            class="text-gray-400 hover:text-white transition-colors ml-2"
+            on:click={toggleFullscreen}
+          >
             <Maximize class="w-5 h-5" />
           </button>
         </div>
@@ -372,3 +475,10 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+</style>
