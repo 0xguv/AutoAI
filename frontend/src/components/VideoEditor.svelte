@@ -21,6 +21,7 @@
   let subtitlePosition = { x: 50, y: 15 }
   let subtitleText = ""
   let videoContainerRef = null
+  let originalFilename = ""
   
   // Export state
   let isExporting = false
@@ -150,6 +151,7 @@
         videoUrl = data.video_url
         captions = parseSrt(data.srt_content)
         resolution = data.resolution || 'original'
+        originalFilename = data.original_filename || ''
       } else {
         throw new Error(data.message || 'Failed to load editor data')
       }
@@ -271,7 +273,7 @@
 <div class="flex-1 flex flex-col ml-16 h-screen">
   <!-- Header -->
   <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-    <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
+    <h1 class="text-lg font-semibold text-gray-900">{originalFilename || 'Video Editor'}</h1>
     <div class="flex items-center space-x-3">
       {#if exportComplete && downloadUrl}
         <a href={downloadUrl} class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center space-x-2">
