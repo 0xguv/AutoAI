@@ -590,12 +590,35 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             output_video_filename = f"subtitled_{filename_for_output}"
             output_video_filepath = os.path.join(app.config['UPLOAD_FOLDER'], output_video_filename)
             
+            # Get video dimensions using ffprobe
+            try:
+                ffprobe_cmd = [
+                    'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                    '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0',
+                    original_video_filepath
+                ]
+                result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=True)
+                video_width, video_height = map(int, result.stdout.strip().split('x'))
+                app.logger.info(f"Video dimensions: {video_width}x{video_height}")
+            except Exception as e:
+                app.logger.warning(f"Could not get video dimensions: {e}, using defaults")
+                video_width, video_height = 1080, 1920  # Default to vertical video
+            
             # Get subtitle position from database
             subtitle_x = job_entry.subtitle_pos_x if job_entry else 50.0
             subtitle_y = job_entry.subtitle_pos_y if job_entry else 15.0
-            # Convert bottom percentage to top coordinate (FFmpeg y=0 is top, y=h is bottom)
-            subtitle_y_ffmpeg = round((100 - subtitle_y) / 100, 2)
-            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}% (FFmpeg: y=h*{subtitle_y_ffmpeg})")
+            
+            # Calculate font size as percentage of video width (8% of width for readability)
+            font_size = int(video_width * 0.075)
+            # Ensure font isn't too small or too large
+            font_size = max(24, min(font_size, 72))
+            
+            # Calculate Y position from bottom (convert percentage to pixels from top)
+            # subtitle_y is % from bottom, so y_pos = height - (height * subtitle_y / 100)
+            y_position = int(video_height * (subtitle_y / 100))
+            
+            app.logger.info(f"Using subtitle position: x={subtitle_x}%, y={subtitle_y}% ({y_position}px from bottom)")
+            app.logger.info(f"Font size: {font_size}px (based on video width {video_width})")
             
             # Parse SRT file to get word-level timing
             def parse_srt(srt_content):
@@ -664,73 +687,48 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'clean_word': re.sub(r'[^\w\s]', '', word)
                     })
             
-            # Build drawtext filters - Hormozi style: chunk-based with active word highlighting
-            # This matches the preview which shows 3 words with the active one highlighted
-            max_words_per_chunk = 3
+            # Build drawtext filters - Single word at a time to avoid ghosting
+            # Using calculated font size based on video dimensions
+            drawtext_filters = []
             
-            # Group words into chunks
-            word_chunks = []
-            for i in range(0, len(word_timestamps), max_words_per_chunk):
-                chunk = word_timestamps[i:i + max_words_per_chunk]
-                word_chunks.append(chunk)
+            # Limit total words to avoid FFmpeg complexity
+            max_words = 50
+            word_timestamps_limited = word_timestamps[:max_words]
             
-            # Limit chunks to avoid FFmpeg complexity issues (max ~20 chunks = 60 words)
-            max_chunks = 20
-            word_chunks = word_chunks[:max_chunks]
-            
-            # Build filter graph using filter_complex for proper layering
-            filter_graph_parts = []
-            
-            for chunk_idx, chunk in enumerate(word_chunks):
-                if not chunk:
-                    continue
+            for word_data in word_timestamps_limited:
+                word = word_data['word']
+                word_start = word_data['start']
+                word_end = word_data['end']
                 
-                chunk_start = chunk[0]['start']
-                chunk_end = chunk[-1]['end']
+                # Escape special characters
+                escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
                 
-                # Build full chunk text (all words visible)
-                full_text = ' '.join([w['word'] for w in chunk])
-                escaped_full = full_text.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
+                # Calculate max text width (80% of video width)
+                max_text_width = int(video_width * 0.8)
                 
-                # Base layer: show all words in white with slight transparency
-                base_filter = (
+                # Create drawtext filter with:
+                # - Dynamic font size based on video width
+                # - Centered alignment
+                # - Fixed Y position from bottom
+                # - Box background (Hormozi style)
+                drawtext_filter = (
                     f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                    f'text=\'{escaped_full}\':'
+                    f'text=\'{escaped_word}\':'
                     f'fontcolor=white:'
-                    f'fontsize=38:'
+                    f'fontsize={font_size}:'
+                    f'box=1:'
+                    f'boxcolor=#FF0000@0.95:'
+                    f'boxborderw=10:'
                     f'x=(w-text_w)/2:'
-                    f'y=h*{subtitle_y_ffmpeg}:'
-                    f'enable=between(t\\,{chunk_start:.3f}\\,{chunk_end:.3f})'
+                    f'y=h-{y_position}-text_h/2:'
+                    f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
                 )
-                filter_graph_parts.append(base_filter)
-                
-                # For each word in chunk, create highlight overlay
-                for word_data in chunk:
-                    word = word_data['word']
-                    word_start = word_data['start']
-                    word_end = word_data['end']
-                    
-                    escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
-                    
-                    # Active word with red background (drawn on top)
-                    highlight_filter = (
-                        f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                        f'text=\'{escaped_word}\':'
-                        f'fontcolor=white:'
-                        f'fontsize=38:'
-                        f'box=1:'
-                        f'boxcolor=#FF0000@0.95:'
-                        f'boxborderw=12:'
-                        f'x=(w-text_w)/2:'
-                        f'y=h*{subtitle_y_ffmpeg}:'
-                        f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
-                    )
-                    filter_graph_parts.append(highlight_filter)
+                drawtext_filters.append(drawtext_filter)
             
-            app.logger.info(f"Created {len(filter_graph_parts)} filter parts for {len(word_chunks)} chunks")
+            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters (font_size={font_size}px)")
             
-            # Build FFmpeg command with proper filter_complex
-            vf_string = ','.join(filter_graph_parts)
+            # Build FFmpeg command
+            vf_string = ','.join(drawtext_filters)
             
             if resolution != 'original':
                 width, height = resolution.split('x')
@@ -740,7 +738,7 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 "ffmpeg",
                 "-i", original_video_filepath,
                 "-y",
-                "-filter_complex", vf_string,
+                "-vf", vf_string,  # Use -vf instead of -filter_complex for simpler chain
                 "-preset", "ultrafast",
                 "-threads", "2",
                 output_video_filepath
