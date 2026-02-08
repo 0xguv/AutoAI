@@ -745,7 +745,7 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             ]
             
             app.logger.info(f"Running FFmpeg burn command for job {original_job_id}")
-            app.logger.info(f"Filter chain has {len(filter_graph_parts)} parts")
+            app.logger.info(f"Filter chain has {len(drawtext_filters)} parts")
             
             result = subprocess.run(
                 ffmpeg_burn_command,
