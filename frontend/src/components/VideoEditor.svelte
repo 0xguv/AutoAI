@@ -20,6 +20,7 @@
   // Subtitle state
   let subtitlePosition = { x: 50, y: 15 }
   let subtitleText = ""
+  let videoContainerRef = null
   
   // Export state
   let isExporting = false
@@ -61,12 +62,12 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
   
-  // Fullscreen toggle
+  // Fullscreen toggle - fullscreen the container, not just video
   function toggleFullscreen() {
-    if (!videoElement) return
+    if (!videoContainerRef) return
     
     if (!document.fullscreenElement) {
-      videoElement.requestFullscreen().then(() => {
+      videoContainerRef.requestFullscreen().then(() => {
         isFullscreen = true
       }).catch(err => {
         console.error('Error attempting to enable fullscreen:', err)
@@ -78,6 +79,12 @@
         console.error('Error attempting to exit fullscreen:', err)
       })
     }
+  }
+  
+  // Prevent right-click on video
+  function handleContextMenu(e) {
+    e.preventDefault()
+    return false
   }
   
   // Seek to position on progress bar click
@@ -297,7 +304,11 @@
       <div class="flex-1 flex flex-col bg-gray-900">
         <!-- Video Container -->
         <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
-          <div class="relative h-full max-h-[calc(100vh-300px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
+          <div 
+            bind:this={videoContainerRef}
+            class="relative h-full max-h-[calc(100vh-300px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl"
+            on:contextmenu|preventDefault={handleContextMenu}
+          >
             <video
               bind:this={videoElement}
               class="w-full h-full object-contain"
@@ -305,6 +316,7 @@
               on:timeupdate={handleTimeUpdate}
               on:play={() => isPlaying = true}
               on:pause={() => isPlaying = false}
+              on:contextmenu|preventDefault={handleContextMenu}
             >
               <track kind="captions" />
             </video>

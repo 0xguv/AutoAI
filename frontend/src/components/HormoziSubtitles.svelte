@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy, tick } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   
   export let videoElement
   export let captions = []
@@ -18,19 +18,33 @@
   let rafId = null
   let mounted = false
   
-  // Convert captions to word-level timestamps
+  // Convert captions to word-level timestamps with variable timing
   $: wordTimestamps = captions.flatMap(caption => {
     const words = caption.text.split(/\s+/).filter(w => w.trim())
     if (words.length === 0) return []
     
     const duration = caption.end - caption.start
-    const wordDuration = duration / words.length
     
-    return words.map((word, index) => ({
-      word: word.replace(/[^\w\s]/gi, ''),
-      start: caption.start + (index * wordDuration),
-      end: caption.start + ((index + 1) * wordDuration),
-    }))
+    // Calculate word weights based on length (longer words need more time)
+    const wordWeights = words.map(word => Math.max(1, word.length * 0.5))
+    const totalWeight = wordWeights.reduce((sum, w) => sum + w, 0)
+    
+    let currentTime = caption.start
+    
+    return words.map((word, index) => {
+      const weight = wordWeights[index]
+      const wordDuration = (weight / totalWeight) * duration
+      const start = currentTime
+      const end = currentTime + wordDuration
+      currentTime = end
+      
+      return {
+        word: word.replace(/[^\w\s]/gi, ''),
+        start,
+        end,
+        originalWord: word
+      }
+    })
   })
   
   // Find active word index based on current time
@@ -53,7 +67,6 @@
     const startIdx = chunkIndex * maxWordsPerLine
     const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
     
-    // Only update if changed to avoid infinite loops
     const newVisible = wordTimestamps.slice(startIdx, endIdx)
     if (JSON.stringify(newVisible) !== JSON.stringify(visibleWords)) {
       visibleWords = newVisible
@@ -115,10 +128,17 @@
       }
     }
     
+    // Prevent right-click
+    const handleContextMenu = (e) => {
+      e.preventDefault()
+      return false
+    }
+    
     videoElement.addEventListener('play', handlePlay)
     videoElement.addEventListener('pause', handlePause)
     videoElement.addEventListener('timeupdate', handleTimeUpdate)
     videoElement.addEventListener('seeking', handleTimeUpdate)
+    videoElement.addEventListener('contextmenu', handleContextMenu)
     
     // Initial update
     handleTimeUpdate()
@@ -128,13 +148,13 @@
       videoElement.removeEventListener('pause', handlePause)
       videoElement.removeEventListener('timeupdate', handleTimeUpdate)
       videoElement.removeEventListener('seeking', handleTimeUpdate)
+      videoElement.removeEventListener('contextmenu', handleContextMenu)
       listenersSetup = false
     }
   }
   
   onMount(() => {
     mounted = true
-    console.log('HormoziSubtitles mounted, captions:', captions.length)
     if (captions.length > 0) {
       updateVisibleWords()
     }
@@ -215,7 +235,7 @@
     backface-visibility: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 0.6em; /* Reduced from default to prevent oversized text */
+    font-size: 0.6em;
   }
 
   .hormozi-word.active {

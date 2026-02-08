@@ -624,6 +624,7 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             app.logger.info(f"Parsed {len(captions)} captions from SRT")
             
             # Build drawtext filters for each word with red boxes
+            # Using variable timing based on word length (matching frontend HormoziSubtitles)
             drawtext_filters = []
             
             for caption in captions:
@@ -634,24 +635,26 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 start_sec = srt_time_to_seconds(caption['start'])
                 end_sec = srt_time_to_seconds(caption['end'])
                 duration = end_sec - start_sec
-                word_duration = duration / len(words)
                 
-                # Build a single drawtext for all words in this caption with red boxes
-                # Each word gets a red box background
-                x_position = 50  # Center horizontally (percentage)
+                # Calculate word weights based on length (longer words = more time)
+                # Matching frontend logic: weight = max(1, length * 0.5)
+                word_weights = [max(1, len(word) * 0.5) for word in words]
+                total_weight = sum(word_weights)
+                
+                # Build drawtext filters for each word
+                current_time = start_sec
                 
                 for i, word in enumerate(words):
-                    word_start = start_sec + (i * word_duration)
-                    word_end = word_start + word_duration
+                    # Calculate word duration based on weight
+                    word_duration = (word_weights[i] / total_weight) * duration
+                    word_start = current_time
+                    word_end = current_time + word_duration
+                    current_time = word_end
                     
                     # Escape special characters for FFmpeg drawtext
-                    # Use double quotes for text parameter to avoid issues with single quotes/apostrophes
-                    # Escape backslashes, double quotes, and colons
                     escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
                     
                     # Create drawtext filter with red box
-                    # Using box=1 for background, boxcolor=red, fontcolor=white
-                    # Use double quotes around text parameter to handle apostrophes correctly
                     drawtext_filter = (
                         f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
                         f'text="{escaped_word}":'
