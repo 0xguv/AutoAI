@@ -700,11 +700,9 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 word_start = word_data['start']
                 word_end = word_data['end']
                 
-                # Escape special characters
-                escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
-                
-                # Calculate max text width (80% of video width)
-                max_text_width = int(video_width * 0.8)
+                # Escape special characters for FFmpeg
+                # Use double quotes for text parameter, escape double quotes in word
+                escaped_word = word.replace('\\', '\\\\\\\\').replace('"', '\\"').replace(':', '\\:')
                 
                 # Create drawtext filter with:
                 # - Dynamic font size based on video width
@@ -712,16 +710,16 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 # - Fixed Y position from bottom
                 # - Box background (Hormozi style)
                 drawtext_filter = (
-                    f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
-                    f'text=\'{escaped_word}\':'
-                    f'fontcolor=white:'
-                    f'fontsize={font_size}:'
-                    f'box=1:'
-                    f'boxcolor=#FF0000@0.95:'
-                    f'boxborderw=10:'
-                    f'x=(w-text_w)/2:'
-                    f'y=h-{y_position}-text_h/2:'
-                    f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
+                    f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                    f'text="{escaped_word}":'
+                    f"fontcolor=white:"
+                    f"fontsize={font_size}:"
+                    f"box=1:"
+                    f"boxcolor=red@0.9:"
+                    f"boxborderw=8:"
+                    f"x=(w-text_w)/2:"
+                    f"y=h-{y_position}:"
+                    f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
                 )
                 drawtext_filters.append(drawtext_filter)
             
