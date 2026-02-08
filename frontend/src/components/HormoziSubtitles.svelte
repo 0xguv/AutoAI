@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   
   export let videoElement
   export let captions = []
@@ -16,10 +16,9 @@
   let visibleWords = []
   let isPlaying = false
   let rafId = null
-  let lastTime = 0
-  let wordElements = []
+  let mounted = false
   
-  // Convert captions to word-level timestamps - RECALCULATES WHEN CAPTIONS CHANGE
+  // Convert captions to word-level timestamps
   $: wordTimestamps = captions.flatMap(caption => {
     const words = caption.text.split(/\s+/).filter(w => w.trim())
     if (words.length === 0) return []
@@ -28,26 +27,13 @@
     const wordDuration = duration / words.length
     
     return words.map((word, index) => ({
-      word: word.replace(/[^\w\s]/gi, ''), // Remove punctuation
+      word: word.replace(/[^\w\s]/gi, ''),
       start: caption.start + (index * wordDuration),
       end: caption.start + ((index + 1) * wordDuration),
-      originalWord: word
     }))
   })
   
-  // Update visible words whenever wordTimestamps or activeWordIndex changes
-  $: {
-    if (wordTimestamps.length > 0) {
-      // Always calculate the correct chunk based on active word
-      const chunkIndex = Math.max(0, Math.floor(activeWordIndex / maxWordsPerLine))
-      const startIdx = chunkIndex * maxWordsPerLine
-      const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
-      visibleWords = wordTimestamps.slice(startIdx, endIdx)
-    } else {
-      visibleWords = []
-    }
-  }
-  
+  // Find active word index based on current time
   function findActiveWordIndex(time) {
     if (!wordTimestamps || wordTimestamps.length === 0) return -1
     return wordTimestamps.findIndex(
@@ -55,34 +41,57 @@
     )
   }
   
+  // Calculate visible words based on active word
+  function updateVisibleWords() {
+    if (wordTimestamps.length === 0) {
+      visibleWords = []
+      return
+    }
+    
+    const effectiveIndex = activeWordIndex >= 0 ? activeWordIndex : 0
+    const chunkIndex = Math.floor(effectiveIndex / maxWordsPerLine)
+    const startIdx = chunkIndex * maxWordsPerLine
+    const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
+    
+    // Only update if changed to avoid infinite loops
+    const newVisible = wordTimestamps.slice(startIdx, endIdx)
+    if (JSON.stringify(newVisible) !== JSON.stringify(visibleWords)) {
+      visibleWords = newVisible
+    }
+  }
+  
+  // Animation loop for smooth updates
   function animationLoop() {
-    if (!videoElement) return
+    if (!videoElement || !mounted) return
     
-    const now = performance.now()
     const videoTime = videoElement.currentTime
-    
-    // Update every frame for smooth sync (removed throttling for better responsiveness)
     currentTime = videoTime
     
     const newActiveIndex = findActiveWordIndex(videoTime)
     if (newActiveIndex !== activeWordIndex) {
       activeWordIndex = newActiveIndex
+      updateVisibleWords()
     }
-    
-    lastTime = now
     
     if (isPlaying) {
       rafId = requestAnimationFrame(animationLoop)
     }
   }
   
-  onMount(() => {
-    if (!videoElement) {
-      console.log('HormoziSubtitles: No video element provided')
-      return
-    }
-    
-    console.log('HormoziSubtitles: Mounted with', captions.length, 'captions')
+  // React to caption changes
+  $: if (captions && captions.length > 0 && mounted) {
+    updateVisibleWords()
+  }
+  
+  // React to videoElement changes
+  $: if (videoElement && mounted) {
+    setupVideoListeners()
+  }
+  
+  let listenersSetup = false
+  function setupVideoListeners() {
+    if (listenersSetup || !videoElement) return
+    listenersSetup = true
     
     const handlePlay = () => {
       isPlaying = true
@@ -96,8 +105,14 @@
     }
     
     const handleTimeUpdate = () => {
-      currentTime = videoElement.currentTime
-      activeWordIndex = findActiveWordIndex(currentTime)
+      if (!isPlaying && videoElement) {
+        currentTime = videoElement.currentTime
+        const newIndex = findActiveWordIndex(currentTime)
+        if (newIndex !== activeWordIndex) {
+          activeWordIndex = newIndex
+          updateVisibleWords()
+        }
+      }
     }
     
     videoElement.addEventListener('play', handlePlay)
@@ -105,36 +120,44 @@
     videoElement.addEventListener('timeupdate', handleTimeUpdate)
     videoElement.addEventListener('seeking', handleTimeUpdate)
     
-    // Initial state
-    activeWordIndex = findActiveWordIndex(videoElement.currentTime || 0)
+    // Initial update
+    handleTimeUpdate()
     
     return () => {
       videoElement.removeEventListener('play', handlePlay)
       videoElement.removeEventListener('pause', handlePause)
       videoElement.removeEventListener('timeupdate', handleTimeUpdate)
       videoElement.removeEventListener('seeking', handleTimeUpdate)
-      if (rafId) cancelAnimationFrame(rafId)
+      listenersSetup = false
+    }
+  }
+  
+  onMount(() => {
+    mounted = true
+    console.log('HormoziSubtitles mounted, captions:', captions.length)
+    if (captions.length > 0) {
+      updateVisibleWords()
     }
   })
   
   onDestroy(() => {
+    mounted = false
     if (rafId) cancelAnimationFrame(rafId)
   })
 </script>
 
-{#if wordTimestamps.length > 0}
+{#if visibleWords.length > 0}
   <div 
     class="hormozi-subtitles-container"
     style="font-size: {fontSize};"
   >
     <div class="hormozi-subtitles-wrapper">
-      {#each visibleWords as wordData, localIndex (wordData.start)}
-        {@const globalIndex = Math.floor(activeWordIndex / maxWordsPerLine) * maxWordsPerLine + localIndex}
+      {#each visibleWords as wordData, localIndex (`${wordData.start}-${wordData.word}`)}
+        {@const globalIndex = Math.floor((activeWordIndex >= 0 ? activeWordIndex : 0) / maxWordsPerLine) * maxWordsPerLine + localIndex}
         {@const isActive = globalIndex === activeWordIndex}
         {@const isPast = globalIndex < activeWordIndex}
         
         <span
-          bind:this={wordElements[localIndex]}
           class="hormozi-word"
           class:active={isActive}
           class:past={isPast}
@@ -155,11 +178,11 @@
 <style>
   .hormozi-subtitles-container {
     position: absolute;
-    bottom: 15%;
+    bottom: 12%;
     left: 50%;
     transform: translateX(-50%);
-    width: 90%;
-    max-width: 1000px;
+    width: 95%;
+    max-width: 900px;
     text-align: center;
     pointer-events: none;
     z-index: 100;
@@ -177,21 +200,22 @@
     flex-wrap: wrap;
     justify-content: center;
     align-items: center;
-    gap: 0.25em;
-    padding: 0.5em;
+    gap: 0.2em;
+    padding: 0.3em;
   }
 
   .hormozi-word {
     display: inline-block;
-    padding: 0.12em 0.2em;
+    padding: 0.1em 0.15em;
     border-radius: 0.08em;
-    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.08s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform, color, background-color;
     transform-origin: center center;
     white-space: nowrap;
     backface-visibility: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-size: 0.6em; /* Reduced from default to prevent oversized text */
   }
 
   .hormozi-word.active {
@@ -212,7 +236,7 @@
       opacity: 0.8;
     }
     50% {
-      transform: scale(1.15);
+      transform: scale(1.1);
     }
     100% {
       transform: scale(1);
@@ -221,17 +245,21 @@
   }
 
   .pop-animation {
-    animation: wordPop 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+    animation: wordPop 0.15s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
   }
 
   @media (max-width: 768px) {
     .hormozi-subtitles-container {
-      bottom: 20%;
-      width: 95%;
+      bottom: 18%;
+      width: 98%;
     }
     
     .hormozi-subtitles-wrapper {
-      gap: 0.15em;
+      gap: 0.1em;
+    }
+
+    .hormozi-word {
+      font-size: 0.5em;
     }
   }
 

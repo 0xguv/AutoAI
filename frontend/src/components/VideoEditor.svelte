@@ -310,7 +310,7 @@
             </video>
             
             <!-- Hormozi-style Dynamic Subtitles -->
-            {#if captions.length > 0}
+            {#if captions.length > 0 && videoElement}
               <HormoziSubtitles 
                 {videoElement} 
                 {captions}
@@ -318,9 +318,9 @@
                 backgroundColor="#FF0000"
                 activeWordColor="#FFFFFF"
                 inactiveWordColor="rgba(255, 255, 255, 0.4)"
-                fontSize="clamp(32px, 5vw, 64px)"
+                fontSize="clamp(20px, 3vw, 40px)"
                 enablePopAnimation={true}
-                popScale={1.15}
+                popScale={1.1}
               />
             {/if}
           </div>
