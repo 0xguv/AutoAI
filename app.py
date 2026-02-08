@@ -645,21 +645,24 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                     word_end = word_start + word_duration
                     
                     # Escape special characters for FFmpeg drawtext
-                    escaped_word = word.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+                    # Use double quotes for text parameter to avoid issues with single quotes/apostrophes
+                    # Escape backslashes, double quotes, and colons
+                    escaped_word = word.replace("\\", "\\\\").replace('"', '\\"').replace(":", "\\:")
                     
                     # Create drawtext filter with red box
                     # Using box=1 for background, boxcolor=red, fontcolor=white
+                    # Use double quotes around text parameter to handle apostrophes correctly
                     drawtext_filter = (
-                        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                        f"text='{escaped_word}':"
-                        f"fontcolor=white:"
-                        f"fontsize=36:"
-                        f"box=1:"
-                        f"boxcolor=red@0.9:"
-                        f"boxborderw=8:"
-                        f"x=(w-text_w)/2:"
-                        f"y=h*0.85:"
-                        f"enable='between(t,{word_start:.3f},{word_end:.3f})'"
+                        f'drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:'
+                        f'text="{escaped_word}":'
+                        f'fontcolor=white:'
+                        f'fontsize=36:'
+                        f'box=1:'
+                        f'boxcolor=red@0.9:'
+                        f'boxborderw=8:'
+                        f'x=(w-text_w)/2:'
+                        f'y=h*0.85:'
+                        f'enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})'
                     )
                     drawtext_filters.append(drawtext_filter)
             
