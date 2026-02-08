@@ -550,7 +550,7 @@ def user_usage_data():
 # This function will be enqueued by RQ
 def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_filepath, filename_for_output, resolution):
     from rq import get_current_job
-    from app import app, db, User, UsageLog, VideoProcessingJob, seconds_to_srt_time, load_faster_whisper_model, get_video_duration, MODEL_DIR, os, subprocess, logging, date
+    from app import app, db, User, UsageLog, VideoProcessingJob, seconds_to_srt_time, load_faster_whisper_model, get_video_duration, MODEL_DIR, os, subprocess, logging, date, re
     
     with app.app_context():
         current_rq_job_id = get_current_job().id
@@ -559,18 +559,16 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             app.logger.error(f"User with ID {user_id} not found for burning job {original_job_id}")
             return {"status": "failed", "error": "User not found"}
 
-        app.logger.info(f"Starting video burning for original job {original_job_id}, user {user_id}, file {filename_for_output}")
+        app.logger.info(f"Starting video burning with red word boxes for original job {original_job_id}, user {user_id}, file {filename_for_output}")
         
         try:
             # Check if original video file still exists
             if not os.path.exists(original_video_filepath):
                 app.logger.error(f"Original video file not found for burning job {original_job_id}: {original_video_filepath}")
-                # Update job status to failed
                 job_entry = VideoProcessingJob.query.get(original_job_id)
                 if job_entry:
                     job_entry.status = 'failed'
                     db.session.commit()
-                # Attempt to delete SRT if it exists
                 if os.path.exists(srt_filepath):
                     os.remove(srt_filepath)
                 return {"status": "failed", "error": "Original video file not found. It might have been deleted or moved."}
@@ -578,22 +576,100 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
             # Check if SRT file exists
             if not os.path.exists(srt_filepath):
                 app.logger.error(f"SRT file not found for burning job {original_job_id}: {srt_filepath}")
-                # Update job status to failed
                 job_entry = VideoProcessingJob.query.get(original_job_id)
                 if job_entry:
                     job_entry.status = 'failed'
                     db.session.commit()
-                # Attempt to delete original video if it exists
                 if os.path.exists(original_video_filepath):
                     os.remove(original_video_filepath)
                 return {"status": "failed", "error": "SRT file not found. It might have been deleted or moved."}
 
             output_video_filename = f"subtitled_{filename_for_output}"
             output_video_filepath = os.path.join(app.config['UPLOAD_FOLDER'], output_video_filename)
-            srt_filepath_for_filter = srt_filepath.replace('\\', '/').replace(':', '\\:') # Handle Windows paths for FFmpeg
-
-            vf_filters = [f"subtitles='{srt_filepath_for_filter}'"]
-
+            
+            # Parse SRT file to get word-level timing
+            def parse_srt(srt_content):
+                captions = []
+                blocks = re.split(r'\n\n+', srt_content.strip())
+                
+                for block in blocks:
+                    lines = block.strip().split('\n')
+                    if len(lines) >= 3:
+                        # Parse time line
+                        time_line = lines[1]
+                        time_match = re.match(r'(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})', time_line)
+                        if time_match:
+                            start_time = time_match.group(1)
+                            end_time = time_match.group(2)
+                            text = ' '.join(lines[2:])
+                            captions.append({
+                                'start': start_time,
+                                'end': end_time,
+                                'text': text
+                            })
+                return captions
+            
+            def srt_time_to_seconds(srt_time):
+                """Convert SRT time format to seconds"""
+                hours, minutes, seconds_millis = srt_time.split(':')
+                seconds, millis = seconds_millis.split(',')
+                return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(millis) / 1000
+            
+            # Read SRT file
+            with open(srt_filepath, 'r', encoding='utf-8') as f:
+                srt_content = f.read()
+            
+            captions = parse_srt(srt_content)
+            app.logger.info(f"Parsed {len(captions)} captions from SRT")
+            
+            # Build drawtext filters for each word with red boxes
+            drawtext_filters = []
+            
+            for caption in captions:
+                words = caption['text'].split()
+                if not words:
+                    continue
+                
+                start_sec = srt_time_to_seconds(caption['start'])
+                end_sec = srt_time_to_seconds(caption['end'])
+                duration = end_sec - start_sec
+                word_duration = duration / len(words)
+                
+                # Build a single drawtext for all words in this caption with red boxes
+                # Each word gets a red box background
+                x_position = 50  # Center horizontally (percentage)
+                
+                for i, word in enumerate(words):
+                    word_start = start_sec + (i * word_duration)
+                    word_end = word_start + word_duration
+                    
+                    # Escape special characters for FFmpeg drawtext
+                    escaped_word = word.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+                    
+                    # Create drawtext filter with red box
+                    # Using box=1 for background, boxcolor=red, fontcolor=white
+                    drawtext_filter = (
+                        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                        f"text='{escaped_word}':"
+                        f"fontcolor=white:"
+                        f"fontsize=36:"
+                        f"box=1:"
+                        f"boxcolor=red@0.9:"
+                        f"boxborderw=8:"
+                        f"x=(w-text_w)/2:"
+                        f"y=h*0.85:"
+                        f"enable='between(t,{word_start:.3f},{word_end:.3f})'"
+                    )
+                    drawtext_filters.append(drawtext_filter)
+            
+            app.logger.info(f"Created {len(drawtext_filters)} drawtext filters for words")
+            
+            # Build FFmpeg command
+            vf_filters = drawtext_filters[:50]  # Limit to 50 words per video for performance (FFmpeg limit workaround)
+            
+            if len(drawtext_filters) > 50:
+                app.logger.warning(f"Limiting to first 50 words due to filter complexity. Total words: {len(drawtext_filters)}")
+            
             if resolution != 'original':
                 width, height = resolution.split('x')
                 vf_filters.append(f"scale={width}x{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")
@@ -602,19 +678,22 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                 "ffmpeg",
                 "-i", original_video_filepath,
                 "-y",
-                "-vf", ",".join(vf_filters),
+                "-vf", ','.join(vf_filters),
                 "-preset", "ultrafast",
-                "-threads", "1",
+                "-threads", "2",
                 output_video_filepath
             ]
             
-            app.logger.info(f"Running FFmpeg burn command for job {original_job_id}: {' '.join(ffmpeg_burn_command)}")
+            app.logger.info(f"Running FFmpeg burn command for job {original_job_id}")
+            app.logger.info(f"Command: {' '.join(ffmpeg_burn_command)}")
             
-            subprocess.run(
+            result = subprocess.run(
                 ffmpeg_burn_command,
                 check=True,
                 capture_output=True
             )
+            
+            app.logger.info(f"FFmpeg completed successfully for job {original_job_id}")
 
             # Clean up original uploaded file and SRT file after processing
             if os.path.exists(original_video_filepath):
