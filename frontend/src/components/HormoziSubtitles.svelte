@@ -19,9 +19,11 @@
   let lastTime = 0
   let wordElements = []
   
-  // Convert captions to word-level timestamps
+  // Convert captions to word-level timestamps - RECALCULATES WHEN CAPTIONS CHANGE
   $: wordTimestamps = captions.flatMap(caption => {
     const words = caption.text.split(/\s+/).filter(w => w.trim())
+    if (words.length === 0) return []
+    
     const duration = caption.end - caption.start
     const wordDuration = duration / words.length
     
@@ -33,16 +35,21 @@
     }))
   })
   
-  // Group words into chunks
-  $: wordChunks = (() => {
-    const chunks = []
-    for (let i = 0; i < wordTimestamps.length; i += maxWordsPerLine) {
-      chunks.push(wordTimestamps.slice(i, i + maxWordsPerLine))
+  // Update visible words whenever wordTimestamps or activeWordIndex changes
+  $: {
+    if (wordTimestamps.length > 0) {
+      // Always calculate the correct chunk based on active word
+      const chunkIndex = Math.max(0, Math.floor(activeWordIndex / maxWordsPerLine))
+      const startIdx = chunkIndex * maxWordsPerLine
+      const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
+      visibleWords = wordTimestamps.slice(startIdx, endIdx)
+    } else {
+      visibleWords = []
     }
-    return chunks
-  })()
+  }
   
   function findActiveWordIndex(time) {
+    if (!wordTimestamps || wordTimestamps.length === 0) return -1
     return wordTimestamps.findIndex(
       word => time >= word.start && time <= word.end
     )
@@ -54,24 +61,15 @@
     const now = performance.now()
     const videoTime = videoElement.currentTime
     
-    // Throttle to 60fps
-    if (now - lastTime >= 16) {
-      currentTime = videoTime
-      
-      const newActiveIndex = findActiveWordIndex(videoTime)
-      
-      if (newActiveIndex !== activeWordIndex) {
-        activeWordIndex = newActiveIndex
-        
-        // Update visible chunk
-        const chunkIndex = Math.floor(newActiveIndex / maxWordsPerLine)
-        const startIdx = chunkIndex * maxWordsPerLine
-        const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
-        visibleWords = wordTimestamps.slice(startIdx, endIdx)
-      }
-      
-      lastTime = now
+    // Update every frame for smooth sync (removed throttling for better responsiveness)
+    currentTime = videoTime
+    
+    const newActiveIndex = findActiveWordIndex(videoTime)
+    if (newActiveIndex !== activeWordIndex) {
+      activeWordIndex = newActiveIndex
     }
+    
+    lastTime = now
     
     if (isPlaying) {
       rafId = requestAnimationFrame(animationLoop)
@@ -79,10 +77,16 @@
   }
   
   onMount(() => {
-    if (!videoElement) return
+    if (!videoElement) {
+      console.log('HormoziSubtitles: No video element provided')
+      return
+    }
+    
+    console.log('HormoziSubtitles: Mounted with', captions.length, 'captions')
     
     const handlePlay = () => {
       isPlaying = true
+      if (rafId) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(animationLoop)
     }
     
@@ -92,14 +96,8 @@
     }
     
     const handleTimeUpdate = () => {
-      if (!isPlaying) {
-        currentTime = videoElement.currentTime
-        activeWordIndex = findActiveWordIndex(currentTime)
-        const chunkIndex = Math.floor(activeWordIndex / maxWordsPerLine)
-        const startIdx = chunkIndex * maxWordsPerLine
-        const endIdx = Math.min(startIdx + maxWordsPerLine, wordTimestamps.length)
-        visibleWords = wordTimestamps.slice(startIdx, endIdx)
-      }
+      currentTime = videoElement.currentTime
+      activeWordIndex = findActiveWordIndex(currentTime)
     }
     
     videoElement.addEventListener('play', handlePlay)
@@ -107,10 +105,8 @@
     videoElement.addEventListener('timeupdate', handleTimeUpdate)
     videoElement.addEventListener('seeking', handleTimeUpdate)
     
-    // Initial visible words
-    if (wordTimestamps.length > 0) {
-      visibleWords = wordTimestamps.slice(0, maxWordsPerLine)
-    }
+    // Initial state
+    activeWordIndex = findActiveWordIndex(videoElement.currentTime || 0)
     
     return () => {
       videoElement.removeEventListener('play', handlePlay)
@@ -124,22 +120,15 @@
   onDestroy(() => {
     if (rafId) cancelAnimationFrame(rafId)
   })
-  
-  $: {
-    // Reset when captions change
-    if (wordTimestamps.length > 0 && visibleWords.length === 0) {
-      visibleWords = wordTimestamps.slice(0, maxWordsPerLine)
-    }
-  }
 </script>
 
-<div 
-  class="hormozi-subtitles-container"
-  style="font-size: {fontSize};"
->
-  <div class="hormozi-subtitles-wrapper">
-    {#each visibleWords as wordData, localIndex}
-      {#if wordData}
+{#if wordTimestamps.length > 0}
+  <div 
+    class="hormozi-subtitles-container"
+    style="font-size: {fontSize};"
+  >
+    <div class="hormozi-subtitles-wrapper">
+      {#each visibleWords as wordData, localIndex (wordData.start)}
         {@const globalIndex = Math.floor(activeWordIndex / maxWordsPerLine) * maxWordsPerLine + localIndex}
         {@const isActive = globalIndex === activeWordIndex}
         {@const isPast = globalIndex < activeWordIndex}
@@ -158,10 +147,10 @@
         >
           {wordData.word.toUpperCase()}
         </span>
-      {/if}
-    {/each}
+      {/each}
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
   .hormozi-subtitles-container {
@@ -196,7 +185,7 @@
     display: inline-block;
     padding: 0.12em 0.2em;
     border-radius: 0.08em;
-    transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform, color, background-color;
     transform-origin: center center;
     white-space: nowrap;
@@ -219,11 +208,11 @@
 
   @keyframes wordPop {
     0% {
-      transform: scale(0.85);
-      opacity: 0.7;
+      transform: scale(0.9);
+      opacity: 0.8;
     }
     50% {
-      transform: scale(1.2);
+      transform: scale(1.15);
     }
     100% {
       transform: scale(1);
@@ -232,7 +221,7 @@
   }
 
   .pop-animation {
-    animation: wordPop 0.25s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+    animation: wordPop 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
   }
 
   @media (max-width: 768px) {
