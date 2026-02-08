@@ -672,68 +672,111 @@ def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_f
                         'end': word_end
                     })
             
-            # Group words into chunks (3 words per chunk like preview)
-            max_words_per_chunk = 3
-            word_chunks = []
-            for i in range(0, len(word_timestamps), max_words_per_chunk):
-                chunk = word_timestamps[i:i + max_words_per_chunk]
-                word_chunks.append(chunk)
+            # Group words into phrases (3-5 words per phrase)
+            max_words_per_phrase = 4
+            phrases = []
+            for i in range(0, len(word_timestamps), max_words_per_phrase):
+                phrase = word_timestamps[i:i + max_words_per_phrase]
+                phrases.append(phrase)
             
-            # Limit chunks to avoid FFmpeg complexity
-            max_chunks = 20
-            word_chunks = word_chunks[:max_chunks]
+            # Limit phrases to avoid FFmpeg complexity
+            max_phrases = 15
+            phrases = phrases[:max_phrases]
             
-            # Build filters - Clear-and-Draw approach with proper layering
-            # Each chunk: Base text (all words) + Highlight (active word)
+            # Build filters - Individual word positioning with unified phrase appearance
+            # Each word is positioned side-by-side to form the phrase
+            # Only the active word gets a red box
             filter_parts = []
             
-            for chunk in word_chunks:
-                if not chunk:
+            for phrase in phrases:
+                if not phrase:
                     continue
                 
-                chunk_start = chunk[0]['start']
-                chunk_end = chunk[-1]['end']
+                # Calculate phrase timing
+                phrase_start = phrase[0]['start']
+                phrase_end = phrase[-1]['end']
                 
-                # Build full chunk text
-                full_text = ' '.join([w['word'] for w in chunk])
-                escaped_full = full_text.replace('\\', '\\\\').replace("'", "'\\''").replace(':', '\\:')
+                # For each word in the phrase, position it side-by-side
+                # This creates a unified phrase layout where each word is independently controlled
+                cumulative_width = 0
                 
-                # Base layer: All words in white (no background) - acts as "clear" for this time period
-                base_filter = (
-                    f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-                    f"text='{escaped_full}':"
-                    f"fontcolor=white:"
-                    f"fontsize={int(video_width * 0.08)}:"
-                    f"x=(w-text_w)/2:"
-                    f"y=h*{(100 - subtitle_y_pct) / 100}:"
-                    f"enable=between(t\\,{chunk_start:.3f}\\,{chunk_end:.3f})"
-                )
-                filter_parts.append(base_filter)
-                
-                # Highlight layers: Each word with red background during its time
-                for word_data in chunk:
+                for idx, word_data in enumerate(phrase):
                     word = word_data['word']
                     word_start = word_data['start']
                     word_end = word_data['end']
                     
-                    escaped_word = word.replace('\\', '\\\\').replace("'", "'\\''").replace(':', '\\:')
+                    # Escape word for FFmpeg
+                    escaped_word = word.replace('\\', '\\\\').replace("'", "'\''").replace(':', '\\:')
                     
-                    # Active word with red box - drawn ON TOP of base
-                    highlight_filter = (
+                    # Calculate word width estimation (rough approximation based on character count)
+                    char_width = int(video_width * 0.04)  # Approximate char width
+                    word_width = len(word) * char_width
+                    
+                    # Build the complete phrase width for centering
+                    total_phrase_width = sum(len(w['word']) for w in phrase) * char_width
+                    phrase_offset = (video_width - total_phrase_width) / 2
+                    
+                    # Position this word within the phrase
+                    word_x_offset = phrase_offset + cumulative_width
+                    cumulative_width += word_width + char_width  # Add spacing
+                    
+                    # Determine if this word is currently active
+                    is_active_start = word_start
+                    is_active_end = word_end
+                    
+                    # Draw the word with red box ONLY during its active time
+                    # During inactive time within the phrase, draw without box
+                    
+                    # ACTIVE state: word with red box
+                    active_filter = (
                         f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
                         f"text='{escaped_word}':"
                         f"fontcolor=white:"
-                        f"fontsize={int(video_width * 0.08)}:"
+                        f"fontsize={int(video_width * 0.075)}:"
                         f"box=1:"
-                        f"boxcolor=red@0.95:"
-                        f"boxborderw=10:"
-                        f"x=(w-text_w)/2:"
+                        f"boxcolor=red@0.9:"
+                        f"boxborderw=8:"
+                        f"x={word_x_offset}:"
                         f"y=h*{(100 - subtitle_y_pct) / 100}:"
                         f"enable=between(t\\,{word_start:.3f}\\,{word_end:.3f})"
                     )
-                    filter_parts.append(highlight_filter)
+                    filter_parts.append(active_filter)
+                    
+                    # INACTIVE state: word without box during phrase time but not this word's time
+                    # Show word in white during the rest of the phrase duration
+                    if idx > 0:
+                        # Show from phrase start until this word's start
+                        inactive_start = phrase_start
+                        inactive_end = word_start
+                        if inactive_end > inactive_start:
+                            inactive_filter = (
+                                f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                                f"text='{escaped_word}':"
+                                f"fontcolor=white:"
+                                f"fontsize={int(video_width * 0.075)}:"
+                                f"x={word_x_offset}:"
+                                f"y=h*{(100 - subtitle_y_pct) / 100}:"
+                                f"enable=between(t\\,{inactive_start:.3f}\\,{inactive_end:.3f})"
+                            )
+                            filter_parts.append(inactive_filter)
+                    
+                    if idx < len(phrase) - 1:
+                        # Show from this word's end until phrase end
+                        inactive_start = word_end
+                        inactive_end = phrase_end
+                        if inactive_end > inactive_start:
+                            inactive_filter = (
+                                f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                                f"text='{escaped_word}':"
+                                f"fontcolor=white:"
+                                f"fontsize={int(video_width * 0.075)}:"
+                                f"x={word_x_offset}:"
+                                f"y=h*{(100 - subtitle_y_pct) / 100}:"
+                                f"enable=between(t\\,{inactive_start:.3f}\\,{inactive_end:.3f})"
+                            )
+                            filter_parts.append(inactive_filter)
             
-            app.logger.info(f"Created {len(filter_parts)} filter parts for {len(word_chunks)} chunks")
+            app.logger.info(f"Created {len(filter_parts)} filters for {len(phrases)} phrases")
             app.logger.info(f"Position: x={subtitle_x_pct}%, y={subtitle_y_pct}% from bottom")
             
             # Build FFmpeg command with filter_complex for proper layering
