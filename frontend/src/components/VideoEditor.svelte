@@ -322,10 +322,7 @@
 <div class="flex-1 flex flex-col ml-16 h-screen">
   <!-- Header -->
   <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
-    <div class="flex items-center space-x-4">
-      <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
-      <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded" title="Exported videos use standard white subtitles for compatibility">ℹ️ Preview styling is for editing only</span>
-    </div>
+    <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
     <div class="flex items-center space-x-3">
       {#if exportComplete && downloadUrl}
         <a href={downloadUrl} class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center space-x-2">
