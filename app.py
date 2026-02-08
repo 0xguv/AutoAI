@@ -1136,6 +1136,28 @@ def create_tables():
         try:
             db.create_all()
             app.logger.info("Database tables created successfully")
+            
+            # Migration: Add subtitle_pos_x and subtitle_pos_y columns if they don't exist
+            # This handles upgrading existing databases
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(db.engine)
+                columns = [col['name'] for col in inspector.get_columns('video_processing_job')]
+                
+                if 'subtitle_pos_x' not in columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN subtitle_pos_x FLOAT DEFAULT 50.0"))
+                        conn.commit()
+                        app.logger.info("Added subtitle_pos_x column")
+                
+                if 'subtitle_pos_y' not in columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN subtitle_pos_y FLOAT DEFAULT 15.0"))
+                        conn.commit()
+                        app.logger.info("Added subtitle_pos_y column")
+            except Exception as migration_error:
+                app.logger.warning(f"Migration warning (may already exist): {migration_error}")
+                
         except Exception as e:
             app.logger.error(f"Error creating database tables: {e}")
         create_tables.has_run = True
