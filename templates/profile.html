@@ -58,6 +58,17 @@
                 return;
             }
             
+            // Check if Chart.js is loaded
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js not loaded');
+                const ctx = canvas.getContext('2d');
+                ctx.font = '14px Inter, sans-serif';
+                ctx.fillStyle = '#6B7280';
+                ctx.textAlign = 'center';
+                ctx.fillText('Chart library not loaded', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
             fetch('/api/user_usage')
                 .then(response => {
                     if (!response.ok) {
@@ -71,6 +82,7 @@
                     // Handle empty data
                     if (!data.dates || data.dates.length === 0) {
                         const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
                         ctx.font = '14px Inter, sans-serif';
                         ctx.fillStyle = '#6B7280';
                         ctx.textAlign = 'center';
@@ -123,10 +135,11 @@
                 .catch(error => {
                     console.error('Error fetching usage data:', error);
                     const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.font = '14px Inter, sans-serif';
                     ctx.fillStyle = '#EF4444';
                     ctx.textAlign = 'center';
-                    ctx.fillText('Error loading chart data', canvas.width / 2, canvas.height / 2);
+                    ctx.fillText('Error loading chart data: ' + error.message, canvas.width / 2, canvas.height / 2);
                 });
         });
     </script>
