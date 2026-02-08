@@ -548,23 +548,28 @@ def user_usage_data():
 
 # Define a function to encapsulate the video processing logic
 # This function will be enqueued by RQ
-def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename_for_output, resolution):
+def burn_subtitles_task(original_job_id, user_id, original_video_filepath, srt_filepath, filename_for_output, resolution):
     from rq import get_current_job
-    from app import app, db, User, UsageLog, seconds_to_srt_time, load_faster_whisper_model, get_video_duration, MODEL_DIR, os, subprocess, logging, date
+    from app import app, db, User, UsageLog, VideoProcessingJob, seconds_to_srt_time, load_faster_whisper_model, get_video_duration, MODEL_DIR, os, subprocess, logging, date
     
     with app.app_context():
-        current_job_id = get_current_job().id
+        current_rq_job_id = get_current_job().id
         user = User.query.get(user_id)
         if not user:
-            app.logger.error(f"User with ID {user_id} not found for burning job {current_job_id}")
+            app.logger.error(f"User with ID {user_id} not found for burning job {original_job_id}")
             return {"status": "failed", "error": "User not found"}
 
-        app.logger.info(f"Starting video burning for job {current_job_id}, user {user_id}, file {filename_for_output}")
+        app.logger.info(f"Starting video burning for original job {original_job_id}, user {user_id}, file {filename_for_output}")
         
         try:
             # Check if original video file still exists
             if not os.path.exists(original_video_filepath):
-                app.logger.error(f"Original video file not found for burning job {current_job_id}: {original_video_filepath}")
+                app.logger.error(f"Original video file not found for burning job {original_job_id}: {original_video_filepath}")
+                # Update job status to failed
+                job_entry = VideoProcessingJob.query.get(original_job_id)
+                if job_entry:
+                    job_entry.status = 'failed'
+                    db.session.commit()
                 # Attempt to delete SRT if it exists
                 if os.path.exists(srt_filepath):
                     os.remove(srt_filepath)
@@ -572,7 +577,12 @@ def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename
             
             # Check if SRT file exists
             if not os.path.exists(srt_filepath):
-                app.logger.error(f"SRT file not found for burning job {current_job_id}: {srt_filepath}")
+                app.logger.error(f"SRT file not found for burning job {original_job_id}: {srt_filepath}")
+                # Update job status to failed
+                job_entry = VideoProcessingJob.query.get(original_job_id)
+                if job_entry:
+                    job_entry.status = 'failed'
+                    db.session.commit()
                 # Attempt to delete original video if it exists
                 if os.path.exists(original_video_filepath):
                     os.remove(original_video_filepath)
@@ -598,7 +608,7 @@ def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename
                 output_video_filepath
             ]
             
-            app.logger.info(f"Running FFmpeg burn command for job {current_job_id}: {' '.join(ffmpeg_burn_command)}")
+            app.logger.info(f"Running FFmpeg burn command for job {original_job_id}: {' '.join(ffmpeg_burn_command)}")
             
             subprocess.run(
                 ffmpeg_burn_command,
@@ -630,14 +640,15 @@ def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename
 
             video_download_url = f"/download/{output_video_filename}"
             
-            # Update the VideoProcessingJob entry
-            job_entry = VideoProcessingJob.query.get(current_job_id)
+            # Update the VideoProcessingJob entry using original_job_id
+            job_entry = VideoProcessingJob.query.get(original_job_id)
             if job_entry:
                 job_entry.output_video_filepath = output_video_filepath
                 job_entry.status = 'completed'
                 db.session.commit()
+                app.logger.info(f"Job {original_job_id} marked as completed")
             else:
-                app.logger.error(f"VideoProcessingJob with ID {current_job_id} not found after burning.")
+                app.logger.error(f"VideoProcessingJob with ID {original_job_id} not found after burning.")
 
             return {
                 "status": "completed",
@@ -646,11 +657,11 @@ def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename
 
         except subprocess.CalledProcessError as e:
             # Update job status to failed
-            job_entry = VideoProcessingJob.query.get(current_job_id)
+            job_entry = VideoProcessingJob.query.get(original_job_id)
             if job_entry:
                 job_entry.status = 'failed'
                 db.session.commit()
-            app.logger.error(f"FFmpeg command failed for burning job {current_job_id} with exit code {e.returncode}")
+            app.logger.error(f"FFmpeg command failed for burning job {original_job_id} with exit code {e.returncode}")
             app.logger.error(f"FFmpeg stdout: {e.stdout.decode(errors='ignore')}")
             app.logger.error(f"FFmpeg stderr: {e.stderr.decode(errors='ignore')}")
             # Clean up original video and srt if burning failed
@@ -661,11 +672,11 @@ def burn_subtitles_task(user_id, original_video_filepath, srt_filepath, filename
             return {"status": "failed", "error": f"FFmpeg burning error: {e.stderr.decode(errors='ignore')}"}
         except Exception as e:
             # Update job status to failed
-            job_entry = VideoProcessingJob.query.get(current_job_id)
+            job_entry = VideoProcessingJob.query.get(original_job_id)
             if job_entry:
                 job_entry.status = 'failed'
                 db.session.commit()
-            app.logger.error(f"An unexpected error occurred for burning job {current_job_id}: {e}")
+            app.logger.error(f"An unexpected error occurred for burning job {original_job_id}: {e}")
             # Clean up original video and srt if burning failed
             if os.path.exists(original_video_filepath):
                 os.remove(original_video_filepath)
@@ -948,9 +959,10 @@ def save_and_burn():
         job_entry.status = 'burning'
         db.session.commit()
 
-        # Enqueue the burn_subtitles_task
+        # Enqueue the burn_subtitles_task - pass the original job_id to update the correct entry
         burn_job = q.enqueue(
             'app.burn_subtitles_task',
+            job_id,  # Original VideoProcessingJob ID
             current_user.id,
             job_entry.original_video_filepath,
             edited_srt_filepath,
@@ -958,9 +970,9 @@ def save_and_burn():
             resolution,
             job_timeout='1h'
         )
-        app.logger.info(f"Burn subtitles task enqueued with job ID: {burn_job.id}")
+        app.logger.info(f"Burn subtitles task enqueued with job ID: {burn_job.id} for original job {job_id}")
 
-        return jsonify({"status": "success", "job_id": burn_job.id, "message": "Subtitles saved and burning process started."})
+        return jsonify({"status": "success", "job_id": job_id, "message": "Subtitles saved and burning process started."})
 
     except Exception as e:
         app.logger.error(f"Error saving edited SRT and enqueuing burn task for job {job_id}: {e}")

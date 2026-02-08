@@ -44,7 +44,7 @@
   }
 </script>
 
-<aside class="w-96 bg-white border-l border-gray-200 flex flex-col">
+<aside class="w-80 bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
   <!-- Panel Header -->
   <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
     <div class="flex items-center space-x-2">

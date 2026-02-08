@@ -7,26 +7,18 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='modern.css') }}">
     {% block head_extra %}{% endblock %}
-    <style>
-        .sidebar-icon {
-            width: 20px;
-            height: 20px;
-            stroke-width: 2;
-        }
-    </style>
 </head>
 <body class="bg-gray-50 font-sans">
     {% if current_user.is_authenticated %}
     <!-- Modern Sidebar matching Editor -->
-    <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 shadow-sm">
+    <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 shadow-sm" id="main-sidebar">
         <!-- Logo -->
         <div class="mb-8">
-            <div class="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
-                <i data-lucide="video" class="w-6 h-6 text-white"></i>
-            </div>
+            <a href="{{ url_for('index') }}" class="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center hover:bg-gray-800 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+            </a>
         </div>
 
         <!-- Navigation -->
@@ -36,7 +28,7 @@
                 class="w-12 h-12 rounded-xl {% if request.endpoint == 'index' %}bg-gray-100 text-gray-900{% else %}text-gray-500{% endif %} flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
                 title="Home"
             >
-                <i data-lucide="home" class="sidebar-icon"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             </a>
             
             <a 
@@ -44,7 +36,7 @@
                 class="w-12 h-12 rounded-xl {% if request.endpoint == 'editor_new' %}bg-gray-100 text-gray-900{% else %}text-gray-500{% endif %} flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
                 title="New Editor"
             >
-                <i data-lucide="video" class="sidebar-icon"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
             </a>
             
             <a 
@@ -52,27 +44,19 @@
                 class="w-12 h-12 rounded-xl {% if request.endpoint == 'profile' %}bg-gray-100 text-gray-900{% else %}text-gray-500{% endif %} flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
                 title="Profile"
             >
-                <i data-lucide="user" class="sidebar-icon"></i>
-            </a>
-            
-            <a 
-                href="{{ url_for('index') }}" 
-                class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                title="Dashboard"
-            >
-                <i data-lucide="settings" class="sidebar-icon"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </a>
         </nav>
 
         <!-- Bottom actions -->
         <div class="mt-auto w-full flex flex-col items-center space-y-2">
-            <button 
+            <a 
+                href="{{ url_for('logout') }}"
                 class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-colors"
-                onclick="window.location.href='{{ url_for('logout') }}'"
                 title="Logout"
             >
-                <i data-lucide="log-out" class="sidebar-icon"></i>
-            </button>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+            </a>
         </div>
     </aside>
     {% endif %}
@@ -112,10 +96,6 @@
         <span>Beep. Boop.</span>
     </div>
 
-    <script>
-        // Initialize Lucide icons
-        lucide.createIcons();
-    </script>
     {% block page_scripts %}{% endblock %}
 </body>
 </html>

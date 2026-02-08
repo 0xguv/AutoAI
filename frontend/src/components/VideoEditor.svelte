@@ -1,29 +1,27 @@
 <script>
   import { onMount } from 'svelte'
-  import { Play, Pause, Volume2, Maximize, SkipBack, SkipForward, Type } from 'lucide-svelte'
+  import { Play, Pause, Volume2, Maximize, SkipBack, SkipForward } from 'lucide-svelte'
   import Timeline from './Timeline.svelte'
   
-  export let jobId // Prop passed from App.svelte
+  export let jobId
 
   let videoElement
   let isPlaying = false
   let currentTime = 0
   let duration = 0
   let volume = 1
-  let videoUrl = '' // To be loaded from API
+  let videoUrl = ''
   let isFullscreen = false
   
   let loading = true
   let error = null
 
-  // Subtitle overlay state
+  // Subtitle state
   let subtitlePosition = { x: 50, y: 15 }
-  let subtitleText = "Your subtitle text here"
+  let subtitleText = ""
   let isDragging = false
   let dragStart = { x: 0, y: 0 }
-  let subtitleSize = { width: 300, height: 60 }
-  let isResizing = false
-  let dragStartTime = 0
+  let subtitleRef = null
   
   // Export state
   let isExporting = false
@@ -37,7 +35,6 @@
       } else {
         videoElement.play()
       }
-      isPlaying = !isPlaying
     }
   }
   
@@ -64,49 +61,47 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
   
-  // Drag handlers for subtitle - distinguish click from drag
+  // Fixed drag handler - centers subtitle on cursor
   function handleSubtitleMouseDown(e) {
-    dragStartTime = Date.now()
-    
-    if (e.target.classList.contains('resize-handle')) {
-      isResizing = true
-    } else {
-      isDragging = true
-    }
-    
-    dragStart = { 
-      x: e.clientX - (subtitlePosition.x / 100 * e.target.parentElement.offsetWidth),
-      y: e.clientY - ((100 - subtitlePosition.y) / 100 * e.target.parentElement.offsetHeight)
-    }
     e.preventDefault()
+    e.stopPropagation()
+    
+    if (!subtitleRef) return
+    
+    isDragging = true
+    
+    const rect = subtitleRef.getBoundingClientRect()
+    const parentRect = subtitleRef.parentElement.getBoundingClientRect()
+    
+    // Calculate offset from center of subtitle to cursor
+    dragStart = {
+      offsetX: e.clientX - (rect.left + rect.width / 2),
+      offsetY: e.clientY - (rect.top + rect.height / 2),
+      parentWidth: parentRect.width,
+      parentHeight: parentRect.height
+    }
   }
   
   function handleMouseMove(e) {
-    if (!isDragging && !isResizing) return
+    if (!isDragging || !subtitleRef) return
     
-    const container = videoElement?.parentElement
-    if (!container) return
+    const parentRect = subtitleRef.parentElement.getBoundingClientRect()
     
-    if (isDragging) {
-      const rect = container.getBoundingClientRect()
-      const x = ((e.clientX - dragStart.x) / rect.width) * 100
-      const y = 100 - ((e.clientY - dragStart.y) / rect.height) * 100
-      
-      subtitlePosition.x = Math.max(10, Math.min(90, x))
-      subtitlePosition.y = Math.max(10, Math.min(90, y))
-    }
+    // Calculate new position relative to parent center
+    const centerX = e.clientX - dragStart.offsetX - parentRect.left
+    const centerY = e.clientY - dragStart.offsetY - parentRect.top
+    
+    // Convert to percentage
+    const x = (centerX / parentRect.width) * 100
+    const y = 100 - ((centerY / parentRect.height) * 100)
+    
+    // Constrain to keep subtitle visible
+    subtitlePosition.x = Math.max(5, Math.min(95, x))
+    subtitlePosition.y = Math.max(5, Math.min(95, y))
   }
   
-  function handleMouseUp(e) {
-    const dragDuration = Date.now() - dragStartTime
-    
-    // If drag was very short (< 200ms), treat it as a click - don't change position
-    if (dragDuration < 200 && isDragging) {
-      // This was a click, not a drag - position already set in mousedown
-    }
-    
+  function handleMouseUp() {
     isDragging = false
-    isResizing = false
   }
   
   // Fullscreen toggle
@@ -165,17 +160,15 @@
         }
         currentCaption = null
       } else if (currentCaption === null) {
-        // This is the caption number, ignore for now, we use idCounter
         currentCaption = { id: idCounter++, text: '', active: false }
       } else if (line.includes('-->')) {
         const [startTime, endTime] = line.split('-->').map(s => s.trim())
         currentCaption.start = srtTimeToSeconds(startTime)
         currentCaption.end = srtTimeToSeconds(endTime)
       } else {
-        currentCaption.text += (currentCaption.text === '' ? '' : '\n') + line.trim()
+        currentCaption.text += (currentCaption.text === '' ? '' : ' ') + line.trim()
       }
     }
-    // Add the last caption if it exists
     if (currentCaption && currentCaption.text.trim() !== '') {
       parsedCaptions.push(currentCaption)
     }
@@ -211,7 +204,6 @@
   function handleCaptionClick(caption) {
     if (videoElement) {
       videoElement.currentTime = caption.start
-      // Active state is now handled by handleTimeUpdate
     }
   }
   
@@ -229,11 +221,11 @@
     }).join('\n\n')
   }
 
-  async function pollBurnStatus(burnJobId) {
+  async function pollBurnStatus(originalJobId) {
     return new Promise((resolve, reject) => {
       const pollInterval = setInterval(async () => {
         try {
-          const response = await fetch(`/api/job_status/${burnJobId}`)
+          const response = await fetch(`/api/job_status/${originalJobId}`)
           const data = await response.json()
           
           if (data.status === 'completed') {
@@ -243,16 +235,14 @@
             clearInterval(pollInterval)
             reject(new Error(data.error || 'Burning failed'))
           } else {
-            // Still processing
             exportStatus = `Processing: ${data.progress_message || data.status}...`
           }
         } catch (e) {
           clearInterval(pollInterval)
           reject(e)
         }
-      }, 3000) // Poll every 3 seconds
+      }, 3000)
       
-      // Timeout after 10 minutes
       setTimeout(() => {
         clearInterval(pollInterval)
         reject(new Error('Export timed out'))
@@ -268,9 +258,7 @@
       const srtContent = generateSrtContent()
       const positionalData = {
         x: subtitlePosition.x,
-        y: subtitlePosition.y,
-        width: subtitleSize.width,
-        height: subtitleSize.height
+        y: subtitlePosition.y
       }
       
       const response = await fetch('/save_and_burn', {
@@ -300,7 +288,6 @@
         
         exportStatus = 'Export complete! Redirecting...'
         
-        // Redirect to home after successful export
         setTimeout(() => {
           window.location.href = '/'
         }, 2000)
@@ -316,13 +303,16 @@
       }, 5000)
     }
   }
+  
+  // Split subtitle text into words for red boxes
+  $: subtitleWords = subtitleText ? subtitleText.split(' ').filter(w => w.trim()) : []
 </script>
 
 <svelte:window on:mousemove={handleMouseMove} on:mouseup={handleMouseUp} />
 
 <div class="flex-1 flex flex-col ml-16 h-screen">
   <!-- Header -->
-  <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+  <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
     <h1 class="text-lg font-semibold text-gray-900">Video Editor ({jobId})</h1>
     <div class="flex items-center space-x-3">
       {#if exportStatus}
@@ -346,122 +336,122 @@
   {:else}
     <div class="flex-1 flex overflow-hidden">
       <!-- Video Player Section -->
-      <div class="flex-1 flex flex-col items-center justify-center bg-gray-900 p-8">
-        <!-- 9:16 Video Container -->
-        <div class="relative h-full max-h-[calc(100vh-340px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
-          <video
-            bind:this={videoElement}
-            class="w-full h-full object-contain"
-            src={videoUrl}
-            on:timeupdate={handleTimeUpdate}
-            on:click={togglePlay}
-            on:play={() => isPlaying = true}
-            on:pause={() => isPlaying = false}
-          >
-            <track kind="captions" />
-          </video>
-          
-          <!-- Draggable/Resizable Subtitle Overlay -->
-          <div
-            class="absolute transform -translate-x-1/2 cursor-move no-select group"
-            style="left: {subtitlePosition.x}%; bottom: {subtitlePosition.y}%;"
-            on:mousedown={handleSubtitleMouseDown}
-            role="button"
-            tabindex="0"
-          >
-            <div 
-              class="bg-black/80 text-white px-4 py-2 rounded-lg text-center min-w-[200px] border-2 border-transparent group-hover:border-green-400 transition-all"
-              style="width: {subtitleSize.width}px;"
+      <div class="flex-1 flex flex-col bg-gray-900">
+        <!-- Video Container -->
+        <div class="flex-1 flex items-center justify-center p-4 overflow-hidden">
+          <div class="relative h-full max-h-[calc(100vh-280px)] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-2xl">
+            <video
+              bind:this={videoElement}
+              class="w-full h-full object-contain"
+              src={videoUrl}
+              on:timeupdate={handleTimeUpdate}
+              on:play={() => isPlaying = true}
+              on:pause={() => isPlaying = false}
             >
-              <p class="text-lg font-medium">{subtitleText}</p>
-              
-              <!-- Resize handles -->
-              <div class="resize-handle absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div class="resize-handle absolute -bottom-1 -left-1 w-3 h-3 bg-green-400 rounded-full cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <track kind="captions" />
+            </video>
+            
+            <!-- Red Word Boxes Subtitle Overlay -->
+            {#if subtitleWords.length > 0}
+              <div
+                bind:this={subtitleRef}
+                class="absolute flex flex-wrap justify-center gap-1 cursor-move select-none px-2"
+                style="left: {subtitlePosition.x}%; bottom: {subtitlePosition.y}%; transform: translate(-50%, 0); max-width: 90%;"
+                on:mousedown={handleSubtitleMouseDown}
+                role="button"
+                tabindex="0"
+              >
+                {#each subtitleWords as word}
+                  <span class="bg-red-600 text-white px-2 py-1 rounded text-lg font-medium whitespace-nowrap">
+                    {word}
+                  </span>
+                {/each}
+                
+                <!-- Position indicator -->
+                <div class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  {Math.round(subtitlePosition.x)}%, {Math.round(subtitlePosition.y)}%
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+        
+        <!-- Controls Section -->
+        <div class="flex flex-col items-center pb-4 px-4 space-y-3">
+          <!-- Progress Bar / Timeline -->
+          <div class="w-full max-w-lg">
+            <div 
+              class="h-2 bg-gray-700 rounded-full cursor-pointer relative overflow-hidden"
+              on:click={handleProgressClick}
+              role="slider"
+              aria-valuenow={currentTime}
+              aria-valuemax={duration}
+              tabindex="0"
+            >
+              <div 
+                class="h-full bg-green-500 rounded-full transition-all duration-100"
+                style="width: {(currentTime / (duration || 1)) * 100}%"
+              ></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-400 mt-1">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+          
+          <!-- Video Controls -->
+          <div class="flex items-center space-x-4 bg-gray-800 rounded-full px-6 py-3">
+            <button 
+              class="text-gray-400 hover:text-white transition-colors"
+              on:click={() => videoElement && (videoElement.currentTime -= 5)}
+            >
+              <SkipBack class="w-5 h-5" />
+            </button>
+            
+            <button 
+              class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-900 hover:bg-gray-200 transition-colors"
+              on:click={togglePlay}
+            >
+              {#if isPlaying}
+                <Pause class="w-5 h-5" />
+              {:else}
+                <Play class="w-5 h-5 ml-0.5" />
+              {/if}
+            </button>
+            
+            <button 
+              class="text-gray-400 hover:text-white transition-colors"
+              on:click={() => videoElement && (videoElement.currentTime += 5)}
+            >
+              <SkipForward class="w-5 h-5" />
+            </button>
+            
+            <div class="w-px h-6 bg-gray-600 mx-2"></div>
+            
+            <span class="text-gray-300 text-sm font-mono min-w-[100px]">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            
+            <div class="flex items-center space-x-2">
+              <Volume2 class="w-4 h-4 text-gray-400" />
+              <input 
+                type="range" 
+                min="0" 
+                max="1" 
+                step="0.1"
+                bind:value={volume}
+                on:input={() => videoElement && (videoElement.volume = volume)}
+                class="w-20 accent-green-500"
+              />
             </div>
             
-            <!-- Position indicator -->
-            <div class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-              {Math.round(subtitlePosition.x)}%, {Math.round(subtitlePosition.y)}%
-            </div>
+            <button 
+              class="text-gray-400 hover:text-white transition-colors ml-2"
+              on:click={toggleFullscreen}
+            >
+              <Maximize class="w-5 h-5" />
+            </button>
           </div>
-          
-          <!-- Guidelines -->
-          <div class="absolute inset-0 pointer-events-none opacity-0 hover:opacity-100 transition-opacity">
-            <div class="absolute left-1/2 top-0 bottom-0 w-px bg-green-400/50"></div>
-            <div class="absolute top-1/2 left-0 right-0 h-px bg-green-400/50"></div>
-          </div>
-        </div>
-        
-        <!-- Progress Bar / Timeline -->
-        <div class="w-full max-w-2xl mt-4 px-4">
-          <div 
-            class="h-2 bg-gray-700 rounded-full cursor-pointer relative overflow-hidden"
-            on:click={handleProgressClick}
-          >
-            <div 
-              class="h-full bg-green-500 rounded-full transition-all duration-100"
-              style="width: {(currentTime / (duration || 1)) * 100}%"
-            ></div>
-          </div>
-          <div class="flex justify-between text-xs text-gray-400 mt-1">
-            <span>{formatTime(currentTime)}</span>
-            <span>{formatTime(duration)}</span>
-          </div>
-        </div>
-        
-        <!-- Video Controls (Bottom Only) -->
-        <div class="mt-4 flex items-center space-x-4 bg-gray-800 rounded-full px-6 py-3">
-          <button 
-            class="text-gray-400 hover:text-white transition-colors"
-            on:click={() => videoElement && (videoElement.currentTime -= 5)}
-          >
-            <SkipBack class="w-5 h-5" />
-          </button>
-          
-          <button 
-            class="w-10 h-10 bg-white rounded-full flex items-center justify-center text-gray-900 hover:bg-gray-200 transition-colors"
-            on:click={togglePlay}
-          >
-            {#if isPlaying}
-              <Pause class="w-5 h-5" />
-            {:else}
-              <Play class="w-5 h-5 ml-0.5" />
-            {/if}
-          </button>
-          
-          <button 
-            class="text-gray-400 hover:text-white transition-colors"
-            on:click={() => videoElement && (videoElement.currentTime += 5)}
-          >
-            <SkipForward class="w-5 h-5" />
-          </button>
-          
-          <div class="w-px h-6 bg-gray-600 mx-2"></div>
-          
-          <span class="text-gray-300 text-sm font-mono min-w-[100px]">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
-          
-          <div class="flex items-center space-x-2">
-            <Volume2 class="w-4 h-4 text-gray-400" />
-            <input 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.1"
-              bind:value={volume}
-              on:input={() => videoElement && (videoElement.volume = volume)}
-              class="w-20 accent-green-500"
-            />
-          </div>
-          
-          <button 
-            class="text-gray-400 hover:text-white transition-colors ml-2"
-            on:click={toggleFullscreen}
-          >
-            <Maximize class="w-5 h-5" />
-          </button>
         </div>
       </div>
 
@@ -477,7 +467,7 @@
 </div>
 
 <style>
-  .no-select {
+  .select-none {
     user-select: none;
     -webkit-user-select: none;
   }
