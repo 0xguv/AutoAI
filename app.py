@@ -151,7 +151,6 @@ class VideoProcessingJob(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     resolution = db.Column(db.String(20), nullable=True) # Store selected resolution
     language = db.Column(db.String(10), nullable=True) # Store selected language
-    video_format = db.Column(db.String(10), nullable=True) # Store selected video format
 
     def __repr__(self):
         return f"<VideoProcessingJob {self.id} - {self.status}>"
@@ -723,7 +722,6 @@ def upload_file():
         # Extract resolution from form
         resolution = request.form.get('resolution', 'original')
         language = request.form.get('language', None) # New: Get language from form
-        video_format = request.form.get('video_format', 'mp4') # Get video format from form
 
         try:
             # ==> DIAGNOSTIC LOGGING <==
@@ -764,8 +762,7 @@ def upload_file():
                 original_filename=filename,
                 status='pending',
                 resolution=resolution, # Store resolution from upload form
-                language=language, # Store language from upload form
-                video_format=video_format # Store video format from upload form
+                language=language # Store language from upload form
             )
             db.session.add(new_job_entry)
             db.session.commit()
@@ -869,8 +866,7 @@ def get_editor_data(job_id):
         "srt_content": srt_content,
         "original_filename": job_entry.original_filename,
         "resolution": job_entry.resolution,
-        "language": job_entry.language,
-        "video_format": job_entry.video_format
+        "language": job_entry.language
     })
 
 @app.route('/edit/<job_id>')
@@ -974,9 +970,8 @@ def save_and_burn():
 
 @app.after_request
 def add_csp_header(response):
-    # Temporarily relax CSP for debugging 'unsafe-eval' and tailwind CDN
-    # WARNING: This is INSECURE for production. Remove or tighten for deployment.
-    csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self';"
+    # CSP policy allowing necessary CDN resources
+    csp = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'self';"
     response.headers['Content-Security-Policy'] = csp
     return response
 
