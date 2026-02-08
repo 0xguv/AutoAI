@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { Play, Pause, Volume2, Maximize, SkipBack, SkipForward } from 'lucide-svelte'
   import Timeline from './Timeline.svelte'
+  import HormoziSubtitles from './HormoziSubtitles.svelte'
   
   export let jobId
 
@@ -19,9 +20,6 @@
   // Subtitle state
   let subtitlePosition = { x: 50, y: 15 }
   let subtitleText = ""
-  let isDragging = false
-  let dragStart = { x: 0, y: 0 }
-  let subtitleRef = null
   
   // Export state
   let isExporting = false
@@ -61,58 +59,6 @@
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, '0')}`
-  }
-  
-  // Improved drag handler - smoother dragging
-  function handleSubtitleMouseDown(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    if (!subtitleRef) return
-    
-    isDragging = true
-    
-    const rect = subtitleRef.getBoundingClientRect()
-    const parentRect = subtitleRef.parentElement.getBoundingClientRect()
-    
-    // Store the initial offset from the center of the subtitle
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-    
-    dragStart = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      subtitleX: subtitlePosition.x,
-      subtitleY: subtitlePosition.y,
-      parentWidth: parentRect.width,
-      parentHeight: parentRect.height
-    }
-  }
-  
-  function handleMouseMove(e) {
-    if (!isDragging || !subtitleRef) return
-    
-    const parentRect = subtitleRef.parentElement.getBoundingClientRect()
-    
-    // Calculate delta from drag start
-    const deltaX = e.clientX - dragStart.mouseX
-    const deltaY = e.clientY - dragStart.mouseY
-    
-    // Convert delta to percentage
-    const deltaXPercent = (deltaX / parentRect.width) * 100
-    const deltaYPercent = (deltaY / parentRect.height) * 100
-    
-    // Apply delta to original position
-    let newX = dragStart.subtitleX + deltaXPercent
-    let newY = dragStart.subtitleY - deltaYPercent
-    
-    // Constrain to keep subtitle visible
-    subtitlePosition.x = Math.max(5, Math.min(95, newX))
-    subtitlePosition.y = Math.max(5, Math.min(95, newY))
-  }
-  
-  function handleMouseUp() {
-    isDragging = false
   }
   
   // Fullscreen toggle
@@ -313,11 +259,7 @@
     }
   }
   
-  // Split subtitle text into words for red boxes
-  $: subtitleWords = subtitleText ? subtitleText.split(' ').filter(w => w.trim()) : []
 </script>
-
-<svelte:window on:mousemove={handleMouseMove} on:mouseup={handleMouseUp} />
 
 <div class="flex-1 flex flex-col ml-16 h-screen">
   <!-- Header -->
@@ -367,30 +309,19 @@
               <track kind="captions" />
             </video>
             
-            <!-- Animated Red Word Boxes Subtitle Overlay -->
-            {#if subtitleWords.length > 0}
-              <div
-                bind:this={subtitleRef}
-                class="absolute flex flex-wrap justify-center gap-1 cursor-move select-none px-2"
-                style="left: {subtitlePosition.x}%; bottom: {subtitlePosition.y}%; transform: translate(-50%, 0); max-width: 90%;"
-                on:mousedown={handleSubtitleMouseDown}
-                role="button"
-                tabindex="0"
-              >
-                {#each subtitleWords as word, i}
-                  <span 
-                    class="bg-red-600 text-white px-2 py-1 rounded text-lg font-medium whitespace-nowrap animate-pop"
-                    style="animation-delay: {i * 100}ms;"
-                  >
-                    {word}
-                  </span>
-                {/each}
-                
-                <!-- Position indicator -->
-                <div class="absolute -top-6 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                  {Math.round(subtitlePosition.x)}%, {Math.round(subtitlePosition.y)}%
-                </div>
-              </div>
+            <!-- Hormozi-style Dynamic Subtitles -->
+            {#if captions.length > 0}
+              <HormoziSubtitles 
+                {videoElement} 
+                {captions}
+                maxWordsPerLine={3}
+                backgroundColor="#FF0000"
+                activeWordColor="#FFFFFF"
+                inactiveWordColor="rgba(255, 255, 255, 0.4)"
+                fontSize="clamp(32px, 5vw, 64px)"
+                enablePopAnimation={true}
+                popScale={1.15}
+              />
             {/if}
           </div>
         </div>
