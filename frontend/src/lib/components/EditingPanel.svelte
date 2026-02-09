@@ -6,10 +6,12 @@
   import { cn } from '../utils';
 
   let generatingAI = false;
-  let generatingEmojis = false; // New state variable
+  let generatingEmojis = false;
+  let generatingBRoll = false; // New state variable
   let searchQuery = '';
   let searchResults = [];
   let searching = false;
+  let suggestedBRoll = []; // To store suggested B-roll clips
 
   const fonts = ['Inter', 'Poppins', 'Roboto', 'Oswald', 'Bebas Neue', 'Montserrat'];
   const positions = [
@@ -72,6 +74,29 @@
       console.error('Emoji generation failed:', err);
     } finally {
       generatingEmojis = false;
+    }
+  }
+
+  async function generateBRollSuggestions() {
+    if (!$currentProject || !$currentProject.captions.length) return;
+    generatingBRoll = true;
+    suggestedBRoll = []; // Clear previous suggestions
+    
+    try {
+      const response = await fetch('/api/ai/generate_broll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captions: $currentProject.captions })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        suggestedBRoll = data.broll_clips;
+      }
+    } catch (err) {
+      console.error('B-Roll generation failed:', err);
+    } finally {
+      generatingBRoll = false;
     }
   }
 
@@ -356,7 +381,7 @@
       >
         {#if generatingAI}
           <Loader2 class="w-5 h-5 animate-spin" />
-          Generating...
+          Generating Viral Content...
         {:else}
           <Sparkles class="w-5 h-5" />
           Generate Viral Content
@@ -376,6 +401,55 @@
           Auto-Generate Emojis
         {/if}
       </button>
+
+      <button
+        on:click={generateBRollSuggestions}
+        disabled={generatingBRoll || !$currentProject?.captions?.length}
+        class="w-full p-4 bg-gradient-to-r from-yellow-500 to-orange-500 rounded-lg font-medium text-white hover:from-yellow-600 hover:to-orange-600 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+      >
+        {#if generatingBRoll}
+          <Loader2 class="w-5 h-5 animate-spin" />
+          Generating B-Roll...
+        {:else}
+          <Film class="w-5 h-5" />
+          Generate B-Roll Suggestions
+        {/if}
+      </button>
+
+      <button
+        on:click={generateEffectsSuggestions}
+        disabled={generatingEffects || !$currentProject?.captions?.length}
+        class="w-full p-4 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-lg font-medium text-white hover:from-purple-600 hover:to-indigo-600 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+      >
+        {#if generatingEffects}
+          <Loader2 class="w-5 h-5 animate-spin" />
+          Generating Effects...
+        {:else}
+          <Sparkles class="w-5 h-5" />
+          Auto-Generate Zoom & Sound Effects
+        {/if}
+      </button>
+
+      {#if suggestedBRoll.length > 0}
+        <div class="space-y-2 mt-4">
+          <h4 class="font-medium text-sm text-dark-text-light">Suggested B-Roll Clips:</h4>
+          <div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+            {#each suggestedBRoll as clip}
+              <div 
+                class="relative aspect-video rounded-lg overflow-hidden border border-dark-lighter hover:border-primary transition cursor-pointer group"
+                on:click={() => currentProject.addBRoll({ ...clip, id: crypto.randomUUID() })}
+                title="Add to timeline: {clip.keyword}"
+              >
+                <img src={clip.thumbnail} alt="B-Roll thumbnail" class="w-full h-full object-cover" />
+                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                  <Plus class="w-8 h-8 text-white" />
+                </div>
+                <span class="absolute bottom-1 left-1 bg-dark-lighter px-1 text-xs text-white rounded opacity-75">{clip.keyword}</span>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       {#if $aiContent}
         <div class="space-y-4">

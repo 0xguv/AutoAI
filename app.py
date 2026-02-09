@@ -108,6 +108,30 @@ def load_faster_whisper_model(model_size="base", device="cpu", compute_type="int
 # model = whisper.load_model("base") # REMOVE THIS LINE - model loaded via function
 
 
+SUBSCRIPTION_TIERS = {
+    'free': {
+        'max_duration_minutes': 5,
+        'max_daily_tries': 3,
+        'broll_generation_enabled': False,
+        'effects_generation_enabled': False,
+        'branding_customization_enabled': False,
+    },
+    'pro': {
+        'max_duration_minutes': 60,
+        'max_daily_tries': -1, # Unlimited
+        'broll_generation_enabled': True,
+        'effects_generation_enabled': True,
+        'branding_customization_enabled': False,
+    },
+    'enterprise': {
+        'max_duration_minutes': 240,
+        'max_daily_tries': -1, # Unlimited
+        'broll_generation_enabled': True,
+        'effects_generation_enabled': True,
+        'branding_customization_enabled': True,
+    }
+}
+
 class User(UserMixin, db.Model):
     __tablename__ = 'user' # Explicitly define table name
     id = db.Column(db.Integer, primary_key=True)
@@ -116,13 +140,12 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False) # Email is now required and unique for all users
     oauth_provider = db.Column(db.String(50), nullable=True)
     oauth_id = db.Column(db.String(256), nullable=True)
-    is_subscribed = db.Column(db.Boolean, default=False)
+    subscription_tier = db.Column(db.String(50), default='free', nullable=False) # New: subscription tier
     daily_tries_count = db.Column(db.Integer, default=0)
     last_try_date = db.Column(db.Date, default=date.min) # Store as date
     
-    # Tiered limits
-    max_duration_minutes = db.Column(db.Integer, default=1) # Default for unregistered/free
-    max_daily_tries = db.Column(db.Integer, default=2) # Default for unregistered/free
+    # Removed max_duration_minutes and max_daily_tries columns
+    # Limits will now be derived from subscription_tier using SUBSCRIPTION_TIERS dict
 
     # Relationship for jobs
     processing_jobs = db.relationship('VideoProcessingJob', backref='user', lazy=True)
@@ -134,10 +157,19 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
     def get_max_duration(self):
-        return self.max_duration_minutes
+        return SUBSCRIPTION_TIERS.get(self.subscription_tier, SUBSCRIPTION_TIERS['free'])['max_duration_minutes']
 
     def get_max_daily_tries(self):
-        return self.max_daily_tries
+        return SUBSCRIPTION_TIERS.get(self.subscription_tier, SUBSCRIPTION_TIERS['free'])['max_daily_tries']
+
+    def can_generate_broll(self):
+        return SUBSCRIPTION_TIERS.get(self.subscription_tier, SUBSCRIPTION_TIERS['free'])['broll_generation_enabled']
+
+    def can_generate_effects(self):
+        return SUBSCRIPTION_TIERS.get(self.subscription_tier, SUBSCRIPTION_TIERS['free'])['effects_generation_enabled']
+    
+    def can_customize_branding(self):
+        return SUBSCRIPTION_TIERS.get(self.subscription_tier, SUBSCRIPTION_TIERS['free'])['branding_customization_enabled']
 
 class VideoProcessingJob(db.Model):
     id = db.Column(db.String(36), primary_key=True) # Use RQ job_id as primary key
@@ -155,9 +187,23 @@ class VideoProcessingJob(db.Model):
     subtitle_pos_x = db.Column(db.Float, default=50.0) # Subtitle X position (percentage)
     subtitle_pos_y = db.Column(db.Float, default=15.0) # Subtitle Y position (percentage)
     word_level_captions_json = db.Column(db.Text, nullable=True) # Store word-level captions as JSON
+    zoom_effects_json = db.Column(db.Text, nullable=True) # Store auto-generated zoom effects as JSON
+    sound_effects_json = db.Column(db.Text, nullable=True) # Store auto-generated sound effects as JSON
 
     def __repr__(self):
         return f"<VideoProcessingJob {self.id} - {self.status}>"
+
+class UserStyleTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    style_json = db.Column(db.Text, nullable=False) # Store the style object as JSON
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('style_templates', lazy=True))
+
+    def __repr__(self):
+        return f"<UserStyleTemplate {self.name} for User {self.user_id}>"
 
 
 
@@ -348,7 +394,7 @@ def register():
         # This can be made more sophisticated later if usernames are still desired.
         username_from_email = email.split('@')[0]
         
-        new_user = User(email=email, username=username_from_email, max_duration_minutes=5, max_daily_tries=5)
+        new_user = User(email=email, username=username_from_email, subscription_tier='free')
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
@@ -424,8 +470,7 @@ def create_or_login_oauth_user(oauth_provider, oauth_id, email, username):
         email=email,
         oauth_provider=oauth_provider,
         oauth_id=oauth_id,
-        max_duration_minutes=5, # Default limits for new users
-        max_daily_tries=5
+        subscription_tier='free' # Default to free tier
     )
     db.session.add(new_user)
     db.session.commit()
@@ -535,16 +580,56 @@ def logout():
     logout_user()
     return redirect(url_for('index', message="Info! You have been logged out."))
 
-@app.route('/upgrade')
+import requests # Needed for making HTTP requests to external APIs
+import stripe # Import Stripe library
+
+# ... (Stripe API key configuration)
+stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
+
+# ... (rest of app.py)
+
+@app.route('/upgrade', methods=['GET', 'POST']) # Allow POST for form submissions if any, though redirect is primary
 @login_required
 def upgrade():
-    # Placeholder for subscription logic - disabled for now
-    # In a real app, this would integrate with a payment gateway
-    # current_user.is_subscribed = True
-    # current_user.max_duration_minutes = 60 # 1 hour
-    # current_user.max_daily_tries = -1 # Unlimited
-    # db.session.commit()
-    return redirect(url_for('index', message="Info! Upgrade feature coming soon!"))
+    # In a real app, you'd have multiple plans. For simplicity, let's assume one "Pro" plan.
+    # Get the base URL for redirects
+    base_url = url_for('index', _external=True)
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            line_items=[
+                {
+                    'price_data': {
+                        'currency': 'usd',
+                        'product_data': {
+                            'name': 'Pro Plan',
+                            'description': 'Unlock all advanced AI features and unlimited exports.',
+                        },
+                        'unit_amount': 999, # $9.99
+                        'recurring': {'interval': 'month'},
+                    },
+                    'quantity': 1,
+                },
+            ],
+            mode='subscription',
+            success_url=base_url + '?message=Upgrade successful!&status=success',
+            cancel_url=base_url + '?message=Upgrade cancelled.&status=info',
+            customer_email=current_user.email,
+            client_reference_id=str(current_user.id), # Pass user ID for webhook
+            metadata={
+                'user_id': str(current_user.id),
+                'subscription_tier': 'pro' # The tier they are trying to upgrade to
+            }
+        )
+        return redirect(checkout_session.url, code=303)
+    except stripe.error.StripeError as e:
+        app.logger.error(f"Stripe checkout error: {e}")
+        flash(f'Payment processing failed: {e}', 'error')
+        return redirect(url_for('index'))
+    except Exception as e:
+        app.logger.error(f"Error creating Stripe checkout session: {e}")
+        flash('An unexpected error occurred during upgrade.', 'error')
+        return redirect(url_for('index'))
 
 @app.route('/profile')
 @login_required
@@ -573,6 +658,66 @@ def user_usage_data():
         'dates': dates,
         'videos_processed': videos_processed
     })
+
+@app.route('/api/user/styles', methods=['POST'])
+@login_required
+def save_user_style():
+    if not current_user.can_customize_branding():
+        return jsonify({"status": "error", "message": "Upgrade to Pro to save custom styles."}), 403
+
+    data = request.get_json()
+    name = data.get('name')
+    style_data = data.get('style')
+
+    if not all([name, style_data]):
+        return jsonify({"status": "error", "message": "Name and style data are required."}), 400
+    
+    # Check if a template with this name already exists for the user
+    existing_template = UserStyleTemplate.query.filter_by(user_id=current_user.id, name=name).first()
+    if existing_template:
+        return jsonify({"status": "error", "message": f"Template '{name}' already exists. Please choose a different name."}), 409
+
+    try:
+        new_template = UserStyleTemplate(
+            user_id=current_user.id,
+            name=name,
+            style_json=json.dumps(style_data)
+        )
+        db.session.add(new_template)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "Style template saved!", "template_id": new_template.id}), 201
+    except Exception as e:
+        app.logger.error(f"Error saving user style template: {e}")
+        return jsonify({"status": "error", "message": "Failed to save style template."}), 500
+
+@app.route('/api/user/styles', methods=['GET'])
+@login_required
+def get_user_styles():
+    templates = UserStyleTemplate.query.filter_by(user_id=current_user.id).all()
+    templates_data = []
+    for t in templates:
+        templates_data.append({
+            "id": t.id,
+            "name": t.name,
+            "style": json.loads(t.style_json),
+            "created_at": t.created_at.isoformat()
+        })
+    return jsonify({"status": "success", "templates": templates_data}), 200
+
+@app.route('/api/user/styles/<int:template_id>', methods=['DELETE'])
+@login_required
+def delete_user_style(template_id):
+    template = UserStyleTemplate.query.filter_by(id=template_id, user_id=current_user.id).first()
+    if not template:
+        return jsonify({"status": "error", "message": "Template not found or unauthorized."}), 404
+    
+    try:
+        db.session.delete(template)
+        db.session.commit()
+        return jsonify({"status": "success", "message": "Style template deleted."}), 200
+    except Exception as e:
+        app.logger.error(f"Error deleting user style template: {e}")
+        return jsonify({"status": "error", "message": "Failed to delete style template."}), 500
 
 # Define a function to encapsulate the video processing logic
 # This function will be enqueued by RQ
@@ -1354,6 +1499,8 @@ def search_broll():
     
     return jsonify({"results": results[:8]})
 
+import requests # Needed for making HTTP requests to external APIs
+
 EMOJI_MAP = {
     "love": "❤️", "heart": "❤️", "happy": "😊", "smile": "😊", "joy": "😂",
     "sad": "😢", "cry": "😭", "angry": "😡", "fire": "🔥", "hot": "🔥",
@@ -1391,6 +1538,164 @@ def generate_emojis():
         processed_captions.append({**segment, 'words': updated_words})
 
     return jsonify({"status": "success", "captions": processed_captions})
+
+@app.route('/api/ai/generate_broll', methods=['POST'])
+@login_required
+def generate_broll():
+    """Analyzes captions to generate B-roll suggestions from stock video APIs."""
+    data = request.get_json()
+    captions = data.get('captions', [])
+
+    if not captions:
+        return jsonify({"error": "Captions required"}), 400
+
+    # Extract keywords from captions
+    keywords = set()
+    for segment in captions:
+        for word_data in segment.get('words', []):
+            word_text = word_data['text'].lower()
+            # Simple keyword extraction: filter out common words
+            if len(word_text) > 3 and word_text not in ['the', 'and', 'for', 'that', 'with', 'this', 'have', 'from', 'they', 'about', 'just', 'like', 'what', 'your', 'when', 'all', 'out', 'one', 'get', 'you', 'can', 'not', 'but', 'how', 'want', 'don', 't', 'know', 'go', 'do', 'if', 'up', 'down', 'in', 'out', 'on', 'off', 'as', 'at', 'by', 'be', 'so', 'to', 'a', 'an', 'is', 'it', 'we', 'he', 'she', 'they', 'me', 'him', 'her', 'us', 'them']:
+                keywords.add(word_text)
+    
+    suggested_broll = []
+    # For simplicity, let's just use the top 3 keywords to search
+    for keyword in list(keywords)[:3]:
+        # Call the existing search_broll function (or similar logic)
+        # Note: calling a route function directly is not standard Flask practice,
+        # better to refactor search_broll's core logic into a separate helper function.
+        # For this task, I'll simulate calling it by reusing its logic.
+        
+        # Simulating search_broll logic
+        pexels_key = os.environ.get('PEXELS_API_KEY')
+        if pexels_key:
+            try:
+                response = requests.get(
+                    'https://api.pexels.com/videos/search',
+                    headers={'Authorization': pexels_key},
+                    params={'query': keyword, 'per_page': 2, 'orientation': 'portrait'} # Get 2 videos per keyword
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for video in data.get('videos', []):
+                        video_files = video.get('video_files', [])
+                        if video_files:
+                            suggested_broll.append({
+                                'id': str(video['id']),
+                                'video_url': video_files[0]['link'],
+                                'thumbnail': video['image'],
+                                'source': 'pexels',
+                                'duration': video.get('duration', 15),
+                                'keyword': keyword # To show why it was suggested
+                            })
+            except Exception as e:
+                app.logger.error(f"Pexels search error for keyword '{keyword}': {e}")
+        
+        # Optionally add Pixabay as well, or just rely on Pexels for now.
+        # For brevity, let's stick to Pexels for initial implementation.
+
+    return jsonify({"status": "success", "broll_clips": suggested_broll})
+
+@app.route('/api/ai/generate_broll', methods=['POST'])
+@login_required
+def generate_broll():
+    """Analyzes captions to generate B-roll suggestions from stock video APIs."""
+    data = request.get_json()
+    captions = data.get('captions', [])
+
+    if not captions:
+        return jsonify({"error": "Captions required"}), 400
+
+    # Extract keywords from captions
+    keywords = set()
+    for segment in captions:
+        for word_data in segment.get('words', []):
+            word_text = word_data['text'].lower()
+            # Simple keyword extraction: filter out common words
+            if len(word_text) > 3 and word_text not in ['the', 'and', 'for', 'that', 'with', 'this', 'have', 'from', 'they', 'about', 'just', 'like', 'what', 'your', 'when', 'all', 'out', 'one', 'get', 'you', 'can', 'not', 'but', 'how', 'want', 'don', 't', 'know', 'go', 'do', 'if', 'up', 'down', 'in', 'out', 'on', 'off', 'as', 'at', 'by', 'be', 'so', 'to', 'a', 'an', 'is', 'it', 'we', 'he', 'she', 'they', 'me', 'him', 'her', 'us', 'them']:
+                keywords.add(word_text)
+    
+    suggested_broll = []
+    # For simplicity, let's just use the top 3 keywords to search
+    for keyword in list(keywords)[:3]:
+        # Call the existing search_broll function (or similar logic)
+        # Note: calling a route function directly is not standard Flask practice,
+        # better to refactor search_broll's core logic into a separate helper function.
+        # For this task, I'll simulate calling it by reusing its logic.
+        
+        # Simulating search_broll logic
+        pexels_key = os.environ.get('PEXELS_API_KEY')
+        if pexels_key:
+            try:
+                response = requests.get(
+                    'https://api.pexels.com/videos/search',
+                    headers={'Authorization': pexels_key},
+                    params={'query': keyword, 'per_page': 2, 'orientation': 'portrait'} # Get 2 videos per keyword
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    for video in data.get('videos', []):
+                        video_files = video.get('video_files', [])
+                        if video_files:
+                            suggested_broll.append({
+                                'id': str(video['id']),
+                                'video_url': video_files[0]['link'],
+                                'thumbnail': video['image'],
+                                'source': 'pexels',
+                                'duration': video.get('duration', 15),
+                                'keyword': keyword # To show why it was suggested
+                            })
+            except Exception as e:
+                app.logger.error(f"Pexels search error for keyword '{keyword}': {e}")
+        
+        # Optionally add Pixabay as well, or just rely on Pexels for initial implementation.
+
+    return jsonify({"status": "success", "broll_clips": suggested_broll})
+
+@app.route('/api/ai/generate_effects', methods=['POST'])
+@login_required
+def generate_effects():
+    """Analyzes captions to suggest auto-zooms and sound effects."""
+    data = request.get_json()
+    captions = data.get('captions', [])
+    video_duration = data.get('videoDuration', 0)
+
+    if not captions:
+        return jsonify({"error": "Captions required"}), 400
+
+    zoom_effects = []
+    sound_effects = []
+
+    for segment in captions:
+        for word_data in segment.get('words', []):
+            if word_data.get('isKeyword'):
+                # For each keyword, suggest a short zoom effect
+                zoom_start = max(0, word_data['start'] - 0.5) # Start zoom slightly before word
+                zoom_end = min(video_duration, word_data['end'] + 0.5) # End zoom slightly after word
+                zoom_duration = zoom_end - zoom_start
+
+                zoom_effects.append({
+                    "id": f"zoom_{word_data['text']}_{word_data['start']}",
+                    "start": zoom_start,
+                    "end": zoom_end,
+                    "type": "zoom_in",
+                    "parameters": {"factor": 1.2, "duration": zoom_duration} # Zoom in by 20%
+                })
+                
+                # For each keyword, suggest a short sound effect
+                sound_start = word_data['start']
+                sound_effects.append({
+                    "id": f"sound_{word_data['text']}_{word_data['start']}",
+                    "start": sound_start,
+                    "type": "whoosh", # Assuming a "whoosh" sound asset
+                    "parameters": {"volume": 0.5}
+                })
+
+    return jsonify({
+        "status": "success",
+        "zoom_effects": zoom_effects,
+        "sound_effects": sound_effects
+    })
 
 @app.route('/api/export/<job_id>', methods=['POST'])
 @login_required

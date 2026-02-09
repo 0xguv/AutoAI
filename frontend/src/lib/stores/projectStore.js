@@ -86,7 +86,20 @@ export const DEFAULT_STYLE = {
 
 // Current project store
 function createProjectStore() {
-  const { subscribe, set, update } = writable(null);
+  const { subscribe, set, update } = writable({
+    id: null,
+    name: '',
+    videoUrl: '',
+    videoDuration: 0,
+    captions: [],
+    bRollClips: [],
+    zoomEffects: [], // New: to store auto-generated zoom effects
+    soundEffects: [], // New: to store auto-generated sound effects
+    style: DEFAULT_STYLE, // Use DEFAULT_STYLE for new projects
+    resolution: '1080x1920',
+    createdAt: new Date(),
+    updatedAt: new Date()
+  });
 
   return {
     subscribe,
@@ -178,8 +191,80 @@ function createProjectStore() {
         });
         return { ...project, captions: updatedCaptions, updatedAt: new Date() };
       });
+    },
+    updateBRollClipStart: (clipId, newStart) => {
+      update(project => {
+        if (!project) return project;
+        const updatedBRollClips = project.bRollClips.map(clip => {
+          if (clip.id === clipId) {
+            // Ensure newStart is not negative
+            const safeNewStart = Math.max(0, newStart);
+            return { ...clip, start: safeNewStart };
+          }
+          return clip;
+        });
+        return { ...project, bRollClips: updatedBRollClips, updatedAt: new Date() };
+      });
+    },
+    updateBRollClipDuration: (clipId, newDuration) => {
+      update(project => {
+        if (!project) return project;
+        const updatedBRollClips = project.bRollClips.map(clip => {
+          if (clip.id === clipId) {
+            // Ensure newDuration is not negative or zero
+            const safeNewDuration = Math.max(0.1, newDuration);
+            return { ...clip, duration: safeNewDuration };
+          }
+          return clip;
+        });
+        return { ...project, bRollClips: updatedBRollClips, updatedAt: new Date() };
+      });
+    },
+    addZoomEffect: (effect) => {
+      update(project => {
+        if (!project) return project;
+        return { ...project, zoomEffects: [...project.zoomEffects, effect], updatedAt: new Date() };
+      });
+    },
+    removeZoomEffect: (effectId) => {
+      update(project => {
+        if (!project) return project;
+        return { ...project, zoomEffects: project.zoomEffects.filter(e => e.id !== effectId), updatedAt: new Date() };
+      });
+    },
+    updateZoomEffect: (effectId, updates) => {
+      update(project => {
+        if (!project) return project;
+        const updatedEffects = project.zoomEffects.map(effect => {
+          if (effect.id === effectId) {
+            return { ...effect, ...updates };
+          }
+          return effect;
+        });
+        return { ...project, zoomEffects: updatedEffects, updatedAt: new Date() };
+      });
+    },
+    addSoundEffect: (effect) => {
+      update(project => {
+        if (!project) return project;
+        return { ...project, soundEffects: [...project.soundEffects, effect], updatedAt: new Date() };
+      });
+    },
+    removeSoundEffect: (effectId) => {
+      update(project => {
+        if (!project) return project;
+        return { ...project, soundEffects: project.soundEffects.filter(e => e.id !== effectId), updatedAt: new Date() };
+      });
+    },
+    updateSoundEffect: (effectId, updates) => {
+      update(project => {
+        if (!project) return project;
+        const updatedEffects = project.soundEffects.map(effect => {
+          if (effect.id === effectId) {
+            return { ...effect, ...updates };
+          }
+          return effect;
+        });
+        return { ...project, soundEffects: updatedEffects, updatedAt: new Date() };
+      });
     }
-  };
-}
-
-export const currentProject = createProjectStore();
