@@ -29,17 +29,33 @@
   async function loadProject(id) {
     try {
       loading = true;
+      console.log('Loading project:', id);
       const response = await fetch(`/api/editor_data/${id}`);
+      console.log('Response status:', response.status);
       if (!response.ok) throw new Error('Failed to load project');
       const data = await response.json();
+      console.log('Project data received:', data);
+      console.log('Video URL:', data.video_url);
+      console.log('Captions:', data.captions);
       
       // Use captions directly from backend (word-level data)
       const captions = data.captions || [];
-      const duration = captions.length > 0 && captions[captions.length - 1].words.length > 0
-        ? captions[captions.length - 1].words[captions[captions.length - 1].words.length - 1].end
-        : 0;
+      console.log('Processing captions:', captions.length, 'items');
       
-      currentProject.set({
+      // Safely calculate duration from captions
+      let duration = 0;
+      if (captions.length > 0) {
+        const lastCaption = captions[captions.length - 1];
+        if (lastCaption?.words && lastCaption.words.length > 0) {
+          const lastWord = lastCaption.words[lastCaption.words.length - 1];
+          duration = lastWord?.end || 0;
+        } else if (lastCaption?.end) {
+          duration = lastCaption.end;
+        }
+      }
+      console.log('Calculated duration:', duration);
+      
+      const projectData = {
         id: data.job_id,
         name: data.original_filename || 'Untitled',
         videoUrl: data.video_url,
@@ -62,15 +78,20 @@
         resolution: data.resolution || '1080x1920',
         createdAt: new Date(),
         updatedAt: new Date()
-      });
+      };
+      console.log('Setting project store with:', projectData);
+      currentProject.set(projectData);
       
       if (duration) {
         videoState.update(v => ({ ...v, duration: duration }));
       }
+      console.log('Project loaded successfully');
     } catch (err) {
+      console.error('Error loading project:', err);
       error = err instanceof Error ? err.message : 'Failed to load project';
     } finally {
       loading = false;
+      console.log('Loading finished. currentProject:', $currentProject);
     }
   }
 </script>

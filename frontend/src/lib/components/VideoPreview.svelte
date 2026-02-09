@@ -20,6 +20,8 @@
   $: project = $currentProject;
   $: video = $videoState;
   $: {
+    console.log('VideoPreview: project changed', project);
+    console.log('VideoPreview: videoUrl =', project?.videoUrl);
     if (project?.resolution) {
       [videoWidth, videoHeight] = project.resolution.split('x').map(Number);
       if (canvasElement) {
@@ -34,6 +36,11 @@
   function handlePause() { videoState.setPlaying(false); }
 
   onMount(() => {
+    console.log('VideoPreview mounted');
+    console.log('VideoPreview: videoElement =', videoElement);
+    console.log('VideoPreview: canvasElement =', canvasElement);
+    console.log('VideoPreview: initial project.videoUrl =', project?.videoUrl);
+    
     ctx = canvasElement.getContext('2d');
     
     // Set canvas dimensions to match video resolution
@@ -49,6 +56,13 @@
       videoElement.addEventListener('play', handlePlay);
       videoElement.addEventListener('pause', handlePause);
       videoElement.addEventListener('seeked', drawCaptions);
+      videoElement.addEventListener('error', (e) => {
+        console.error('Video error:', e);
+        console.error('Video error details:', videoElement?.error);
+      });
+      videoElement.addEventListener('loadstart', () => console.log('Video load started'));
+      videoElement.addEventListener('loadeddata', () => console.log('Video data loaded'));
+      videoElement.addEventListener('canplay', () => console.log('Video can play'));
     }
 
     // Start the drawing loop
@@ -91,6 +105,9 @@
   }
 
   function handleMetadata() {
+    console.log('Video metadata loaded');
+    console.log('Video duration:', videoElement?.duration);
+    console.log('Video dimensions:', videoElement?.videoWidth, 'x', videoElement?.videoHeight);
     if (videoElement) {
       videoState.update(v => ({ ...v, duration: videoElement.duration }));
       if (project?.resolution) { // Update video dimensions from project if available
@@ -349,17 +366,31 @@
   class="relative w-full max-w-md aspect-[9/16] bg-black rounded-2xl overflow-hidden shadow-2xl"
 >
   <!-- Video Element -->
-  <video
-    bind:this={videoElement}
-    src={project?.videoUrl}
-    class="w-full h-full object-contain"
-    on:click={togglePlay}
-    crossorigin="anonymous"
-    playsinline
-    muted
-  >
-    <track kind="captions" />
-  </video>
+  {#if project?.videoUrl}
+    <video
+      bind:this={videoElement}
+      src={project.videoUrl}
+      class="w-full h-full object-contain"
+      on:click={togglePlay}
+      crossorigin="anonymous"
+      playsinline
+      muted
+    >
+      <track kind="captions" />
+    </video>
+  {:else}
+    <div class="w-full h-full flex items-center justify-center bg-black">
+      <div class="text-center">
+        <svg class="w-16 h-16 text-gray-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-white text-lg">No video loaded</p>
+        <p class="text-gray-400 text-sm mt-2">videoUrl: {project?.videoUrl || 'undefined'}</p>
+        <p class="text-gray-400 text-sm">project: {project ? 'exists' : 'null'}</p>
+      </div>
+    </div>
+  {/if}
 
   <!-- Canvas for dynamic captions -->
   <canvas 
