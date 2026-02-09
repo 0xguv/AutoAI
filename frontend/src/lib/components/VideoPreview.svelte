@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { currentProject, videoState, activeCaption, activeWord, uiState } from '../stores/editor';
-  import { getTextShadowCSS, getAnimationCSS, cn } from '../utils';
+  import { currentProject, videoState, activeCaption, activeWord } from '../stores/editor';
+  import { getTextShadowCSS, getAnimationCSS } from '../utils';
 
   let videoElement;
   let containerRef;
@@ -66,7 +66,7 @@
     };
   }
 
-  function getWordStyles(wordObj, index) {
+  function getWordStyles(wordObj) {
     const isActive = wordObj === word;
     return {
       backgroundColor: isActive && style.highlightWords ? style.highlightColor || '#FFD700' : 'transparent',
@@ -91,7 +91,7 @@
 
 <div 
   bind:this={containerRef}
-  class="relative w-full max-w-md aspect-[9/16] bg-black rounded-lg overflow-hidden"
+  class="relative w-full max-w-md aspect-[9/16] bg-black rounded-2xl overflow-hidden shadow-2xl"
 >
   <!-- Video Element -->
   <video
@@ -107,13 +107,13 @@
   <!-- Caption Overlay -->
   {#if caption}
     <div 
-      class="absolute inset-x-8 {getPositionClasses()} {animationClass}"
+      class="absolute inset-x-6 {getPositionClasses()} {animationClass}"
       style={getCaptionStyles()}
     >
       {#if style.wordByWord && words.length > 0}
         <span class="inline-flex flex-wrap justify-center gap-1">
-          {#each words as wordObj, index}
-            <span style={getWordStyles(wordObj, index)}>
+          {#each words as wordObj}
+            <span style={getWordStyles(wordObj)}>
               {wordObj.text}
             </span>
           {/each}
@@ -130,8 +130,8 @@
       class="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity hover:bg-black/40"
       on:click={togglePlay}
     >
-      <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
-        <svg class="w-8 h-8 text-black ml-1" fill="currentColor" viewBox="0 0 24 24">
+      <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+        <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
           <path d="M8 5v14l11-7z"/>
         </svg>
       </div>
@@ -139,7 +139,7 @@
   {/if}
 
   <!-- Current Time Indicator -->
-  <div class="absolute bottom-4 left-4 text-white text-sm font-mono bg-black/50 px-2 py-1 rounded">
+  <div class="absolute bottom-4 left-4 text-white text-sm font-mono bg-black/60 px-2 py-1 rounded">
     {Math.floor(currentTime / 60)}:{(Math.floor(currentTime) % 60).toString().padStart(2, '0')}
   </div>
 </div>

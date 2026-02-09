@@ -1,16 +1,15 @@
 <script>
   import { currentProject, videoState, uiState } from '../stores/editor';
+  import { Film } from 'lucide-svelte';
   import { formatTime } from '../utils';
 
   let timelineRef;
   let isDragging = false;
-  let dragType = null;
-  let draggedCaptionId = null;
 
   $: duration = $currentProject?.videoDuration || 0;
   $: captions = $currentProject?.captions || [];
   $: currentTime = $videoState.currentTime;
-  $: zoom = 50; // pixels per second
+  $: zoom = 50;
 
   function handleTimelineClick(e) {
     const rect = timelineRef.getBoundingClientRect();
@@ -27,8 +26,6 @@
   function getCaptionStyle(caption) {
     const left = (caption.start / duration) * 100;
     const width = ((caption.end - caption.start) / duration) * 100;
-    const isSelected = $uiState.selectedCaptionId === caption.id;
-    
     return `left: ${left}%; width: ${width}%;`;
   }
 
@@ -38,10 +35,10 @@
   }
 </script>
 
-<div class="h-full flex flex-col bg-[#0f0f0f]">
+<div class="h-full flex flex-col bg-white">
   <!-- Timeline Header -->
-  <div class="h-8 border-b border-white/10 flex items-center px-4 text-xs text-gray-500">
-    <span class="w-20">Timeline</span>
+  <div class="h-8 border-b border-gray-200 flex items-center px-4 text-xs text-gray-500">
+    <span class="w-20 font-medium">Timeline</span>
     <div class="flex-1 flex justify-between">
       {#each Array(6) as _, i}
         <span>{formatTime((duration / 5) * i)}</span>
@@ -53,14 +50,20 @@
   <div class="flex-1 relative overflow-x-auto overflow-y-hidden">
     <div 
       bind:this={timelineRef}
-      class="absolute inset-0 min-w-full"
+      class="absolute inset-0 min-w-full cursor-pointer"
       on:click={handleTimelineClick}
+      role="slider"
+      aria-label="Timeline"
+      aria-valuemin={0}
+      aria-valuemax={duration}
+      aria-valuenow={currentTime}
+      tabindex="0"
     >
       <!-- Time Grid -->
       <div class="absolute inset-0 pointer-events-none">
         {#each Array(Math.ceil(duration / 5)) as _, i}
           <div 
-            class="absolute top-0 bottom-0 border-l border-white/5"
+            class="absolute top-0 bottom-0 border-l border-gray-200"
             style="left: {(i * 5 / duration) * 100}%"
           />
         {/each}
@@ -70,7 +73,7 @@
       <div class="absolute top-4 left-0 right-0 h-16 px-2">
         {#each captions as caption}
           <button
-            class="absolute h-12 rounded bg-blue-500/30 border-2 border-blue-500/50 hover:bg-blue-500/50 transition flex items-center px-2 overflow-hidden text-xs text-left {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-white' : ''}"
+            class="absolute h-12 rounded bg-blue-100 border-2 border-blue-300 hover:bg-blue-200 transition flex items-center px-2 overflow-hidden text-xs text-left text-blue-900 {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-blue-500' : ''}"
             style={getCaptionStyle(caption)}
             on:click|stopPropagation={() => handleCaptionClick(caption)}
           >
@@ -84,7 +87,7 @@
         <div class="absolute top-24 left-0 right-0 h-12 px-2">
           {#each $currentProject.bRollClips as clip}
             <div
-              class="absolute h-10 rounded bg-purple-500/30 border-2 border-purple-500/50 flex items-center px-2 overflow-hidden text-xs"
+              class="absolute h-10 rounded bg-purple-100 border-2 border-purple-300 flex items-center px-2 overflow-hidden text-xs text-purple-900"
               style="left: {(clip.start / duration) * 100}%; width: {(clip.duration / duration) * 100}%;"
             >
               <Film class="w-3 h-3 mr-1" />
@@ -96,7 +99,7 @@
 
       <!-- Playhead -->
       <div 
-        class="absolute top-0 bottom-0 w-px bg-red-500 z-10 pointer-events-none"
+        class="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
         style={getPlayheadStyle()}
       >
         <div class="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
@@ -105,9 +108,9 @@
   </div>
 
   <!-- Zoom Controls -->
-  <div class="h-10 border-t border-white/10 flex items-center px-4 gap-4">
+  <div class="h-10 border-t border-gray-200 flex items-center px-4 gap-4 bg-gray-50">
     <button 
-      class="text-gray-400 hover:text-white transition"
+      class="text-gray-500 hover:text-gray-900 transition"
       on:click={() => zoom = Math.max(20, zoom - 10)}
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +119,7 @@
     </button>
     <span class="text-xs text-gray-500">Zoom</span>
     <button 
-      class="text-gray-400 hover:text-white transition"
+      class="text-gray-500 hover:text-gray-900 transition"
       on:click={() => zoom = Math.min(200, zoom + 10)}
     >
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,7 +128,3 @@
     </button>
   </div>
 </div>
-
-<script context="module">
-  import { Film } from 'lucide-svelte';
-</script>

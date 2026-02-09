@@ -75,40 +75,40 @@
   }
 </script>
 
-<div class="h-full flex flex-col">
+<div class="h-full flex flex-col bg-gray-50">
   <!-- Tab Content -->
   {#if $activeTab === 'captions'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg">Caption Settings</h3>
+      <h3 class="font-semibold text-lg text-gray-900">Caption Settings</h3>
       
       <div class="space-y-3">
-        <label class="flex items-center justify-between p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition">
-          <span>Word-by-word highlighting</span>
+        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition">
+          <span class="text-gray-700">Word-by-word highlighting</span>
           <input 
             type="checkbox" 
             checked={$currentProject?.style?.wordByWord}
             on:change={(e) => currentProject.updateStyle({ wordByWord: e.target.checked })}
-            class="w-5 h-5 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
+            class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
         </label>
 
-        <label class="flex items-center justify-between p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition">
-          <span>Highlight active words</span>
+        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition">
+          <span class="text-gray-700">Highlight active words</span>
           <input 
             type="checkbox" 
             checked={$currentProject?.style?.highlightWords}
             on:change={(e) => currentProject.updateStyle({ highlightWords: e.target.checked })}
-            class="w-5 h-5 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
+            class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
         </label>
 
         {#if $currentProject?.style?.highlightWords}
           <div class="space-y-2">
-            <label class="text-sm text-gray-400">Highlight Color</label>
+            <label class="text-sm text-gray-600">Highlight Color</label>
             <div class="flex gap-2">
               {#each ['#FFD700', '#FF6B6B', '#00F5FF', '#FF00FF', '#00FF00'] as color}
                 <button
-                  class="w-8 h-8 rounded-lg border-2 transition {($currentProject?.style?.highlightColor || '#FFD700') === color ? 'border-white scale-110' : 'border-transparent hover:border-white/50'}"
+                  class="w-8 h-8 rounded-lg border-2 transition {($currentProject?.style?.highlightColor || '#FFD700') === color ? 'border-gray-900 scale-110' : 'border-transparent hover:border-gray-300'}"
                   style="background-color: {color}"
                   on:click={() => currentProject.updateStyle({ highlightColor: color })}
                 />
@@ -122,14 +122,14 @@
   {:else if $activeTab === 'style'}
     <div class="p-4 space-y-6 overflow-y-auto">
       <div>
-        <h3 class="font-semibold text-lg mb-3">Style Presets</h3>
+        <h3 class="font-semibold text-lg text-gray-900 mb-3">Style Presets</h3>
         <div class="grid grid-cols-2 gap-2">
           {#each Object.entries(STYLE_PRESETS) as [name, preset]}
             <button
-              class="p-3 bg-white/5 rounded-lg text-left hover:bg-white/10 transition text-sm"
+              class="p-3 bg-white rounded-lg border border-gray-200 text-left hover:border-gray-300 transition text-sm"
               on:click={() => currentProject.applyPreset(name)}
             >
-              <div class="font-medium capitalize">{name.replace('-', ' ')}</div>
+              <div class="font-medium capitalize text-gray-900">{name.replace('-', ' ')}</div>
               <div class="text-xs text-gray-500 mt-1">
                 {preset.fontWeight} • {preset.animation}
               </div>
@@ -139,14 +139,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="font-semibold text-lg">Typography</h3>
+        <h3 class="font-semibold text-lg text-gray-900">Typography</h3>
         
         <div class="space-y-2">
-          <label class="text-sm text-gray-400">Font Family</label>
+          <label class="text-sm text-gray-600">Font Family</label>
           <select 
             value={$currentProject?.style?.fontFamily || 'Inter'}
             on:change={(e) => currentProject.updateStyle({ fontFamily: e.target.value })}
-            class="w-full p-2 bg-white/5 rounded-lg border border-white/10 text-white"
+            class="w-full p-2 bg-white rounded-lg border border-gray-200 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           >
             {#each fonts as font}
               <option value={font}>{font}</option>
@@ -155,9 +155,9 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-400 flex justify-between">
+          <label class="text-sm text-gray-600 flex justify-between">
             <span>Font Size</span>
-            <span>{$currentProject?.style?.fontSize || 42}px</span>
+            <span class="text-gray-900">{$currentProject?.style?.fontSize || 42}px</span>
           </label>
           <input 
             type="range" 
@@ -170,11 +170,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-400">Position</label>
+          <label class="text-sm text-gray-600">Position</label>
           <div class="flex gap-2">
             {#each positions as pos}
               <button
-                class="flex-1 p-2 bg-white/5 rounded-lg text-sm transition {($currentProject?.style?.position || 'bottom') === pos.id ? 'bg-white text-black' : 'hover:bg-white/10'}"
+                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.position || 'bottom') === pos.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'}"
                 on:click={() => currentProject.updateStyle({ position: pos.id })}
               >
                 {pos.label}
@@ -184,11 +184,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-400">Animation</label>
+          <label class="text-sm text-gray-600">Animation</label>
           <select 
             value={$currentProject?.style?.animation || 'pop'}
             on:change={(e) => currentProject.updateStyle({ animation: e.target.value })}
-            class="w-full p-2 bg-white/5 rounded-lg border border-white/10 text-white"
+            class="w-full p-2 bg-white rounded-lg border border-gray-200 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           >
             {#each animations as anim}
               <option value={anim.id}>{anim.label}</option>
@@ -197,11 +197,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-400">Text Shadow</label>
+          <label class="text-sm text-gray-600">Text Shadow</label>
           <div class="flex gap-2">
             {#each ['none', 'light', 'medium', 'heavy'] as shadow}
               <button
-                class="flex-1 p-2 bg-white/5 rounded-lg text-sm transition {($currentProject?.style?.textShadow || 'medium') === shadow ? 'bg-white text-black' : 'hover:bg-white/10'}"
+                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.textShadow || 'medium') === shadow ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'}"
                 on:click={() => currentProject.updateStyle({ textShadow: shadow })}
               >
                 {shadow}
@@ -214,20 +214,20 @@
 
   {:else if $activeTab === 'broll'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg">B-Roll Library</h3>
+      <h3 class="font-semibold text-lg text-gray-900">B-Roll Library</h3>
       
       <div class="flex gap-2">
         <input 
           type="text" 
           bind:value={searchQuery}
           placeholder="Search stock footage..."
-          class="flex-1 p-2 bg-white/5 rounded-lg border border-white/10 text-white placeholder-gray-500"
+          class="flex-1 p-2 bg-white rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           on:keydown={(e) => e.key === 'Enter' && searchBRoll()}
         />
         <button 
           on:click={searchBRoll}
           disabled={searching}
-          class="p-2 bg-white text-black rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+          class="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
         >
           {#if searching}
             <Loader2 class="w-5 h-5 animate-spin" />
@@ -258,12 +258,12 @@
 
   {:else if $activeTab === 'ai-tools'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg">AI Magic Tools</h3>
+      <h3 class="font-semibold text-lg text-gray-900">AI Magic Tools</h3>
       
       <button
         on:click={generateAIContent}
         disabled={generatingAI}
-        class="w-full p-4 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        class="w-full p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg font-medium text-white hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {#if generatingAI}
           <Loader2 class="w-5 h-5 animate-spin" />
@@ -276,23 +276,23 @@
 
       {#if $aiContent}
         <div class="space-y-4">
-          <div class="p-3 bg-white/5 rounded-lg">
-            <h4 class="font-medium text-sm text-gray-400 mb-2">Hook Ideas</h4>
+          <div class="p-3 bg-white rounded-lg border border-gray-200">
+            <h4 class="font-medium text-sm text-gray-600 mb-2">Hook Ideas</h4>
             <ul class="space-y-2">
               {#each $aiContent.hooks as hook}
-                <li class="text-sm p-2 bg-white/5 rounded">{hook}</li>
+                <li class="text-sm p-2 bg-gray-50 rounded text-gray-900">{hook}</li>
               {/each}
             </ul>
           </div>
 
-          <div class="p-3 bg-white/5 rounded-lg">
-            <h4 class="font-medium text-sm text-gray-400 mb-2">Description</h4>
-            <p class="text-sm">{$aiContent.descriptions[0]}</p>
+          <div class="p-3 bg-white rounded-lg border border-gray-200">
+            <h4 class="font-medium text-sm text-gray-600 mb-2">Description</h4>
+            <p class="text-sm text-gray-900">{$aiContent.descriptions[0]}</p>
           </div>
 
-          <div class="p-3 bg-white/5 rounded-lg">
-            <h4 class="font-medium text-sm text-gray-400 mb-2">Hashtags</h4>
-            <p class="text-sm text-blue-400">{$aiContent.hashtags.join(' ')}</p>
+          <div class="p-3 bg-white rounded-lg border border-gray-200">
+            <h4 class="font-medium text-sm text-gray-600 mb-2">Hashtags</h4>
+            <p class="text-sm text-blue-600">{$aiContent.hashtags.join(' ')}</p>
           </div>
         </div>
       {/if}

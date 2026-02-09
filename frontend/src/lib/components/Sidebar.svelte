@@ -1,5 +1,5 @@
 <script>
-  import { activeTab, currentProject } from '../stores/editor';
+  import { activeTab } from '../stores/editor';
   import { Type, Palette, Film, Sparkles } from 'lucide-svelte';
 
   const tabs = [
@@ -16,8 +16,8 @@
 
 <div class="flex flex-col h-full">
   <!-- Logo -->
-  <div class="h-14 flex items-center justify-center border-b border-white/10">
-    <a href="/" class="text-white">
+  <div class="h-14 flex items-center justify-center border-b border-gray-200">
+    <a href="/" class="text-gray-900">
       <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 6v12"/>
@@ -30,7 +30,7 @@
   <nav class="flex-1 flex flex-col items-center py-4 gap-1">
     {#each tabs as tab}
       <button
-        class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 group relative {$activeTab === tab.id ? 'bg-white text-black' : 'text-gray-400 hover:text-white hover:bg-white/10'}"
+        class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 group relative {$activeTab === tab.id ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200'}"
         on:click={() => activeTab.set(tab.id)}
         title={tab.label}
       >
@@ -45,10 +45,10 @@
   </nav>
 
   <!-- Bottom Actions -->
-  <div class="flex flex-col items-center py-4 gap-2 border-t border-white/10">
+  <div class="flex flex-col items-center py-4 gap-2 border-t border-gray-200">
     <a 
       href="/profile"
-      class="w-12 h-12 rounded-xl text-gray-400 flex items-center justify-center hover:text-white hover:bg-white/10 transition"
+      class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:text-gray-900 hover:bg-gray-200 transition"
       title="Profile"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -57,7 +57,7 @@
     </a>
     
     <button 
-      class="w-12 h-12 rounded-xl text-gray-400 flex items-center justify-center hover:text-red-400 hover:bg-red-400/10 transition"
+      class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:text-red-600 hover:bg-red-50 transition"
       on:click={handleLogout}
       title="Logout"
     >
