@@ -37,9 +37,9 @@
         <div class="mt-auto w-full flex flex-col items-center space-y-2 pb-2">
             <!-- Token Indicator -->
             <div class="mb-2">
-                <div class="flex items-center justify-center px-2 py-1.5 bg-gray-100 rounded-lg border border-gray-200 cursor-default" title="{% if current_user.max_daily_tries == -1 %}Unlimited Tokens{% else %}{{ current_user.max_daily_tries - current_user.daily_tries_count }} / {{ current_user.max_daily_tries }} Tokens Remaining{% endif %}">
+                <div class="flex items-center justify-center px-2 py-1.5 bg-gray-100 rounded-lg border border-gray-200 cursor-default" title="{% if current_user.get_max_daily_tries() == -1 %}Unlimited Tokens{% else %}{{ current_user.get_max_daily_tries() - current_user.daily_tries_count }} / {{ current_user.get_max_daily_tries() }} Tokens Remaining{% endif %}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600 mr-1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M8 10h8v4H8z"/></svg>
-                    <span class="text-sm font-semibold text-gray-700">{% if current_user.max_daily_tries == -1 %}∞{% else %}{{ current_user.max_daily_tries - current_user.daily_tries_count }}{% endif %}</span>
+                    <span class="text-sm font-semibold text-gray-700">{% if current_user.get_max_daily_tries() == -1 %}∞{% else %}{{ current_user.get_max_daily_tries() - current_user.daily_tries_count }}{% endif %}</span>
                 </div>
             </div>
             
