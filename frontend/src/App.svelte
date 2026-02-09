@@ -26,63 +26,6 @@
     }
   });
 
-  // Parse SRT content to caption format
-  function parseSRT(srtContent) {
-    if (!srtContent) return [];
-    
-    const captions = [];
-    const blocks = srtContent.trim().split(/\n\s*\n/);
-    
-    blocks.forEach((block, index) => {
-      const lines = block.trim().split('\n');
-      if (lines.length < 3) return;
-      
-      // Parse time line (e.g., "00:00:01,000 --> 00:00:04,000")
-      const timeLine = lines[1];
-      const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})/);
-      
-      if (timeMatch) {
-        const start = parseTime(timeMatch[1]);
-        const end = parseTime(timeMatch[2]);
-        const text = lines.slice(2).join(' ').trim();
-        
-        // Split text into words with estimated timestamps
-        const words = text.split(' ').map((word, wordIndex) => {
-          const wordDuration = (end - start) / text.split(' ').length;
-          return {
-            text: word,
-            start: start + (wordIndex * wordDuration),
-            end: start + ((wordIndex + 1) * wordDuration),
-            confidence: 0.95
-          };
-        });
-        
-        captions.push({
-          id: `caption_${index}`,
-          text: text,
-          start: start,
-          end: end,
-          words: words
-        });
-      }
-    });
-    
-    return captions;
-  }
-  
-  function parseTime(timeStr) {
-    // Convert "00:00:01,000" to seconds
-    const parts = timeStr.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
-    if (!parts) return 0;
-    
-    const hours = parseInt(parts[1]);
-    const minutes = parseInt(parts[2]);
-    const seconds = parseInt(parts[3]);
-    const milliseconds = parseInt(parts[4]);
-    
-    return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000;
-  }
-
   async function loadProject(id) {
     try {
       loading = true;
@@ -90,9 +33,11 @@
       if (!response.ok) throw new Error('Failed to load project');
       const data = await response.json();
       
-      // Parse SRT content to structured captions
-      const captions = parseSRT(data.srt_content);
-      const duration = captions.length > 0 ? captions[captions.length - 1].end : 0;
+      // Use captions directly from backend (word-level data)
+      const captions = data.captions || [];
+      const duration = captions.length > 0 && captions[captions.length - 1].words.length > 0
+        ? captions[captions.length - 1].words[captions[captions.length - 1].words.length - 1].end
+        : 0;
       
       currentProject.set({
         id: data.job_id,

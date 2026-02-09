@@ -154,6 +154,7 @@ class VideoProcessingJob(db.Model):
     language = db.Column(db.String(10), nullable=True) # Store selected language
     subtitle_pos_x = db.Column(db.Float, default=50.0) # Subtitle X position (percentage)
     subtitle_pos_y = db.Column(db.Float, default=15.0) # Subtitle Y position (percentage)
+    word_level_captions_json = db.Column(db.Text, nullable=True) # Store word-level captions as JSON
 
     def __repr__(self):
         return f"<VideoProcessingJob {self.id} - {self.status}>"
@@ -220,32 +221,56 @@ def transcribe_video_task(user_id, original_filepath, filename, language, user_m
             subprocess.run(ffmpeg_audio_command, check=True, capture_output=True)
 
             model_ft = load_faster_whisper_model()
-            segments, info = model_ft.transcribe(audio_filepath, beam_size=5, language=language if language else None)
+            segments, info = model_ft.transcribe(
+                audio_filepath, 
+                beam_size=5, 
+                language=language if language else None,
+                word_timestamps=True # Enable word-level timestamps
+            )
             
-            srt_content = ""
+            # Process segments to extract word-level data
+            word_level_captions = []
             for i, segment in enumerate(segments):
-                start_time = seconds_to_srt_time(segment.start)
-                end_time = seconds_to_srt_time(segment.end)
-                text = segment.text.strip()
-                srt_content += f"{i+1}\n{start_time} --> {end_time}\n{text}\n\n"
-
-            # Save SRT in UPLOAD_FOLDER alongside the original video (for now)
-            srt_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{current_job_id}_{audio_filename_base}.srt")
-            with open(srt_filepath, "w", encoding="utf-8") as f:
-                f.write(srt_content)
+                segment_words = []
+                # Ensure segment.words is iterable
+                if hasattr(segment, 'words') and segment.words:
+                    for word in segment.words:
+                        segment_words.append({
+                            "text": word.word,
+                            "start": word.start,
+                            "end": word.end,
+                            "probability": getattr(word, 'probability', 0.0) # Confidence score, default to 0.0 if not present
+                        })
+                
+                word_level_captions.append({
+                    "id": f"segment_{i+1}", # Unique ID for each segment
+                    "text": segment.text.strip(),
+                    "start": segment.start,
+                    "end": segment.end,
+                    "words": segment_words
+                })
+            
+            # Save word-level data as JSON in the database
+            job_entry = VideoProcessingJob.query.get(current_job_id)
+            if job_entry:
+                job_entry.word_level_captions_json = json.dumps(word_level_captions)
+                # The generated_srt_filepath is no longer directly used for content storage
+                # but might be referenced elsewhere. Point it to a placeholder.
+                job_entry.generated_srt_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{current_job_id}_word_level_data.json")
+                job_entry.status = 'transcribed'
+                db.session.commit()
+            else:
+                app.logger.error(f"VideoProcessingJob with ID {current_job_id} not found after transcription.")
             
             # Clean up audio file and temp directory
             os.remove(audio_filepath)
             os.rmdir(temp_dir)
 
-            # Update the VideoProcessingJob entry
-            job_entry = VideoProcessingJob.query.get(current_job_id)
-            if job_entry:
-                job_entry.generated_srt_filepath = srt_filepath
-                job_entry.status = 'transcribed'
-                db.session.commit()
-            else:
-                app.logger.error(f"VideoProcessingJob with ID {current_job_id} not found after transcription.")
+            return {
+                "status": "transcribed",
+                "original_video_filepath": original_filepath,
+                "word_level_captions": word_level_captions
+            }
 
             return {
                 "status": "transcribed",
@@ -1011,12 +1036,19 @@ def get_editor_data(job_id):
     video_url = url_for('download_file', filename=os.path.basename(job_entry.original_video_filepath))
     app.logger.info(f"Generated video_url for job {job_id}: {video_url}")
     
-    srt_content = ""
-    try:
-        with open(job_entry.generated_srt_filepath, "r", encoding="utf-8") as f:
-            srt_content = f.read()
-    except FileNotFoundError:
-        return jsonify({"status": "error", "message": "Generated SRT file not found."}), 404
+    # Now we fetch word-level captions directly from the DB
+    word_level_captions = []
+    if job_entry.word_level_captions_json:
+        try:
+            word_level_captions = json.loads(job_entry.word_level_captions_json)
+        except json.JSONDecodeError:
+            app.logger.error(f"Failed to decode word_level_captions_json for job {job_id}")
+            return jsonify({"status": "error", "message": "Failed to load word-level captions."}), 500
+    else:
+        app.logger.warning(f"No word_level_captions_json for job {job_id}. This should not happen in new flow.")
+        # If no word-level data, try to fall back to old SRT if it exists and parse it.
+        # For now, we assume word_level_captions_json will always be present for new jobs.
+        return jsonify({"status": "error", "message": "Word-level captions not available."}), 404
 
     job_entry.status = 'editing' # Update status to indicate it's being edited
     db.session.commit()
@@ -1025,7 +1057,7 @@ def get_editor_data(job_id):
         "status": "success",
         "job_id": job_id,
         "video_url": video_url,
-        "srt_content": srt_content,
+        "captions": word_level_captions, # New: directly provide parsed captions
         "original_filename": job_entry.original_filename,
         "resolution": job_entry.resolution,
         "language": job_entry.language
@@ -1321,6 +1353,44 @@ def search_broll():
         ]
     
     return jsonify({"results": results[:8]})
+
+EMOJI_MAP = {
+    "love": "❤️", "heart": "❤️", "happy": "😊", "smile": "😊", "joy": "😂",
+    "sad": "😢", "cry": "😭", "angry": "😡", "fire": "🔥", "hot": "🔥",
+    "money": "💰", "cash": "💵", "good": "👍", "great": "👍", "ok": "👌",
+    "bad": "👎", "fail": "🤦", "idea": "💡", "think": "🤔", "question": "❓",
+    "exclamation": "❗", "surprise": "😮", "wow": "🤩", "cool": "😎",
+    "fun": "🥳", "party": "🎉", "music": "🎶", "dance": "💃", "food": "🍔",
+    "drink": "🍹", "fast": "⚡", "slow": "🐢", "work": "💼", "📚": "study",
+    "travel": "✈️", "home": "🏠", "yes": "✅", "no": "❌", "danger": "⚠️",
+    "star": "⭐", "rocket": "🚀", "top": "🔝", "bottom": "⬇️", "up": "⬆️",
+    "down": "⬇️", "left": "⬅️", "right": "➡️"
+}
+
+@app.route('/api/ai/generate_emojis', methods=['POST'])
+@login_required
+def generate_emojis():
+    """Analyzes caption text and suggests relevant emojis."""
+    data = request.get_json()
+    captions = data.get('captions', [])
+
+    if not captions:
+        return jsonify({"error": "Captions required"}), 400
+
+    processed_captions = []
+    for segment in captions:
+        updated_words = []
+        for word_data in segment.get('words', []):
+            word_text = word_data['text'].lower()
+            found_emoji = None
+            for keyword, emoji in EMOJI_MAP.items():
+                if keyword in word_text:
+                    found_emoji = emoji
+                    break
+            updated_words.append({**word_data, 'emoji': found_emoji})
+        processed_captions.append({**segment, 'words': updated_words})
+
+    return jsonify({"status": "success", "captions": processed_captions})
 
 @app.route('/api/export/<job_id>', methods=['POST'])
 @login_required

@@ -6,6 +6,7 @@
   import { cn } from '../utils';
 
   let generatingAI = false;
+  let generatingEmojis = false; // New state variable
   let searchQuery = '';
   let searchResults = [];
   let searching = false;
@@ -44,6 +45,33 @@
       console.error('AI generation failed:', err);
     } finally {
       generatingAI = false;
+    }
+  }
+
+  async function generateEmojis() {
+    if (!$currentProject || !$currentProject.captions.length) return;
+    generatingEmojis = true;
+    
+    try {
+      const response = await fetch('/api/ai/generate_emojis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captions: $currentProject.captions })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Update currentProject with captions that now include emojis
+        currentProject.update(project => ({ 
+          ...project, 
+          captions: data.captions,
+          updatedAt: new Date()
+        }));
+      }
+    } catch (err) {
+      console.error('Emoji generation failed:', err);
+    } finally {
+      generatingEmojis = false;
     }
   }
 
@@ -117,6 +145,65 @@
               {/each}
             </div>
           </div>
+        {/if}
+      </div>
+
+      <div class="space-y-4">
+        <h3 class="font-semibold text-lg text-white">Emoji Editor</h3>
+        {#if $currentProject?.captions?.length}
+          <div class="max-h-60 overflow-y-auto space-y-2 pr-2">
+            {#each $currentProject.captions as segment}
+              <div class="bg-dark-lighter rounded-lg p-3">
+                <p class="text-xs text-dark-text mb-2">Segment: {segment.start.toFixed(2)}s - {segment.end.toFixed(2)}s</p>
+                <div class="flex flex-wrap gap-2">
+                  {#each segment.words as word, wordIndex}
+                    <div class="flex items-center bg-dark rounded-md px-2 py-1">
+                      <span class="text-white text-sm mr-1">{word.text}</span>
+                      <input 
+                        type="text" 
+                        maxlength="2" 
+                        bind:value={word.emoji} 
+                        on:input={(e) => currentProject.updateWordEmoji(segment.id, wordIndex, e.target.value)}
+                        class="w-8 h-6 text-sm bg-transparent text-center border-none focus:ring-0 p-0 text-white"
+                        placeholder="😊"
+                      />
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="text-dark-text-light text-sm">Load a video with captions to edit emojis.</p>
+        {/if}
+      </div>
+
+      <div class="space-y-4">
+        <h3 class="font-semibold text-lg text-white">Keyword Editor</h3>
+        {#if $currentProject?.captions?.length}
+          <div class="max-h-60 overflow-y-auto space-y-2 pr-2">
+            {#each $currentProject.captions as segment}
+              <div class="bg-dark-lighter rounded-lg p-3">
+                <p class="text-xs text-dark-text mb-2">Segment: {segment.start.toFixed(2)}s - {segment.end.toFixed(2)}s</p>
+                <div class="flex flex-wrap gap-2">
+                  {#each segment.words as word, wordIndex}
+                    <div class="flex items-center bg-dark rounded-md px-2 py-1">
+                      <span class="text-white text-sm mr-1">{word.text}</span>
+                      <input 
+                        type="checkbox" 
+                        checked={word.isKeyword || false} 
+                        on:change={(e) => currentProject.updateWordIsKeyword(segment.id, wordIndex, e.target.checked)}
+                        class="w-4 h-4 rounded border-dark-lighter text-primary focus:ring-primary"
+                        title="Mark as keyword"
+                      />
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="text-dark-text-light text-sm">Load a video with captions to mark keywords.</p>
         {/if}
       </div>
     </div>
@@ -273,6 +360,20 @@
         {:else}
           <Sparkles class="w-5 h-5" />
           Generate Viral Content
+        {/if}
+      </button>
+
+      <button
+        on:click={generateEmojis}
+        disabled={generatingEmojis || !$currentProject?.captions?.length}
+        class="w-full p-4 bg-gradient-to-r from-green-500 to-teal-500 rounded-lg font-medium text-white hover:from-green-600 hover:to-teal-600 transition disabled:opacity-50 flex items-center justify-center gap-2 mt-4"
+      >
+        {#if generatingEmojis}
+          <Loader2 class="w-5 h-5 animate-spin" />
+          Generating Emojis...
+        {:else}
+          <Sparkles class="w-5 h-5" />
+          Auto-Generate Emojis
         {/if}
       </button>
 

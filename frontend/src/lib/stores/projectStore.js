@@ -142,6 +142,42 @@ function createProjectStore() {
           updatedAt: new Date()
         };
       });
+    },
+    updateWordEmoji: (segmentId, wordIndex, emoji) => {
+      update(project => {
+        if (!project) return project;
+        const updatedCaptions = project.captions.map(segment => {
+          if (segment.id === segmentId) {
+            const updatedWords = segment.words.map((word, index) => {
+              if (index === wordIndex) {
+                return { ...word, emoji: emoji || null }; // Set emoji or null if empty
+              }
+              return word;
+            });
+            return { ...segment, words: updatedWords };
+          }
+          return segment;
+        });
+        return { ...project, captions: updatedCaptions, updatedAt: new Date() };
+      });
+    },
+    updateWordIsKeyword: (segmentId, wordIndex, isKeyword) => {
+      update(project => {
+        if (!project) return project;
+        const updatedCaptions = project.captions.map(segment => {
+          if (segment.id === segmentId) {
+            const updatedWords = segment.words.map((word, index) => {
+              if (index === wordIndex) {
+                return { ...word, isKeyword: isKeyword };
+              }
+              return word;
+            });
+            return { ...segment, words: updatedWords };
+          }
+          return segment;
+        });
+        return { ...project, captions: updatedCaptions, updatedAt: new Date() };
+      });
     }
   };
 }
