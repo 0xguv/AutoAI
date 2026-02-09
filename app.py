@@ -1347,6 +1347,26 @@ def create_tables():
                         conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN subtitle_pos_y FLOAT DEFAULT 15.0"))
                         conn.commit()
                         app.logger.info("Added subtitle_pos_y column")
+                
+                # Add new JSON columns for enhanced features
+                if 'word_level_captions_json' not in columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN word_level_captions_json TEXT"))
+                        conn.commit()
+                        app.logger.info("Added word_level_captions_json column")
+                
+                if 'zoom_effects_json' not in columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN zoom_effects_json TEXT"))
+                        conn.commit()
+                        app.logger.info("Added zoom_effects_json column")
+                
+                if 'sound_effects_json' not in columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE video_processing_job ADD COLUMN sound_effects_json TEXT"))
+                        conn.commit()
+                        app.logger.info("Added sound_effects_json column")
+                        
             except Exception as migration_error:
                 app.logger.warning(f"Migration warning (may already exist): {migration_error}")
             
