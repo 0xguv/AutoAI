@@ -1596,62 +1596,6 @@ def generate_broll():
 
     return jsonify({"status": "success", "broll_clips": suggested_broll})
 
-@app.route('/api/ai/generate_broll', methods=['POST'])
-@login_required
-def generate_broll():
-    """Analyzes captions to generate B-roll suggestions from stock video APIs."""
-    data = request.get_json()
-    captions = data.get('captions', [])
-
-    if not captions:
-        return jsonify({"error": "Captions required"}), 400
-
-    # Extract keywords from captions
-    keywords = set()
-    for segment in captions:
-        for word_data in segment.get('words', []):
-            word_text = word_data['text'].lower()
-            # Simple keyword extraction: filter out common words
-            if len(word_text) > 3 and word_text not in ['the', 'and', 'for', 'that', 'with', 'this', 'have', 'from', 'they', 'about', 'just', 'like', 'what', 'your', 'when', 'all', 'out', 'one', 'get', 'you', 'can', 'not', 'but', 'how', 'want', 'don', 't', 'know', 'go', 'do', 'if', 'up', 'down', 'in', 'out', 'on', 'off', 'as', 'at', 'by', 'be', 'so', 'to', 'a', 'an', 'is', 'it', 'we', 'he', 'she', 'they', 'me', 'him', 'her', 'us', 'them']:
-                keywords.add(word_text)
-    
-    suggested_broll = []
-    # For simplicity, let's just use the top 3 keywords to search
-    for keyword in list(keywords)[:3]:
-        # Call the existing search_broll function (or similar logic)
-        # Note: calling a route function directly is not standard Flask practice,
-        # better to refactor search_broll's core logic into a separate helper function.
-        # For this task, I'll simulate calling it by reusing its logic.
-        
-        # Simulating search_broll logic
-        pexels_key = os.environ.get('PEXELS_API_KEY')
-        if pexels_key:
-            try:
-                response = requests.get(
-                    'https://api.pexels.com/videos/search',
-                    headers={'Authorization': pexels_key},
-                    params={'query': keyword, 'per_page': 2, 'orientation': 'portrait'} # Get 2 videos per keyword
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    for video in data.get('videos', []):
-                        video_files = video.get('video_files', [])
-                        if video_files:
-                            suggested_broll.append({
-                                'id': str(video['id']),
-                                'video_url': video_files[0]['link'],
-                                'thumbnail': video['image'],
-                                'source': 'pexels',
-                                'duration': video.get('duration', 15),
-                                'keyword': keyword # To show why it was suggested
-                            })
-            except Exception as e:
-                app.logger.error(f"Pexels search error for keyword '{keyword}': {e}")
-        
-        # Optionally add Pixabay as well, or just rely on Pexels for initial implementation.
-
-    return jsonify({"status": "success", "broll_clips": suggested_broll})
-
 @app.route('/api/ai/generate_effects', methods=['POST'])
 @login_required
 def generate_effects():
