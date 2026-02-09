@@ -1,6 +1,8 @@
 <script>
   import { onMount } from 'svelte';
-  import { currentProject, videoState, uiState } from './lib/stores/editor';
+  import { currentProject } from './lib/stores/projectStore';
+  import { videoState } from './lib/stores/videoPlayerStore';
+  import { uiState } from './lib/stores/uiStore';
   import Sidebar from './lib/components/Sidebar.svelte';
   import EditorLayout from './lib/components/EditorLayout.svelte';
   import VideoPreview from './lib/components/VideoPreview.svelte';
@@ -128,7 +130,7 @@
   }
 </script>
 
-<main class="h-screen w-full overflow-hidden bg-white text-gray-900 font-sans">
+<main class="h-screen w-full overflow-hidden bg-dark text-dark-text font-sans">
   {#if loading}
     <div class="flex items-center justify-center h-full">
       <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
@@ -138,15 +140,37 @@
       {error}
     </div>
   {:else if !$currentProject}
-    <div class="flex flex-col items-center justify-center h-full text-gray-400 ml-16">
-      <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-      </svg>
-      <p class="text-xl mb-2">No video selected</p>
-      <p class="text-sm">Go to dashboard to select a video to edit</p>
-      <a href="/" class="mt-4 px-4 py-2 bg-white text-black rounded-lg hover:bg-gray-200 transition">
-        Go to Dashboard
-      </a>
+    <div class="flex flex-col items-center justify-center h-full text-dark-text ml-16 px-8 text-center">
+      <h2 class="text-5xl font-heading text-white mb-6 animate-fade-in">
+        Start Creating Magic
+      </h2>
+      <p class="text-lg text-dark-text-light mb-8 max-w-xl animate-slide-up">
+        Unleash the power of AI to transform your videos with stunning, viral-ready captions,
+        emojis, and dynamic effects.
+      </p>
+      <div class="flex gap-4 mb-12 animate-bounce-in">
+        <button 
+          class="flex items-center gap-2 px-8 py-4 bg-primary text-white text-xl font-semibold rounded-xl shadow-lg hover:bg-primary-dark transition-all duration-300 transform hover:-translate-y-1"
+          on:click={() => window.location.href = '/upload'} // Assuming an upload route
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>
+          </svg>
+          Upload New Video
+        </button>
+        <a 
+          href="/dashboard" 
+          class="flex items-center gap-2 px-8 py-4 bg-dark-lighter text-dark-text-light text-xl font-semibold rounded-xl shadow-lg hover:bg-primary hover:text-white transition-all duration-300 transform hover:-translate-y-1"
+        >
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+          </svg>
+          Browse Projects
+        </a>
+      </div>
+      <p class="text-sm text-dark-text mt-4">
+        Need inspiration? Check out our <a href="/examples" class="text-primary hover:underline">examples gallery</a>.
+      </p>
     </div>
   {:else}
     <EditorLayout>

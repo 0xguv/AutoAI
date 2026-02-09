@@ -1,5 +1,7 @@
 <script>
-  import { activeTab, currentProject, STYLE_PRESETS, aiContent } from '../stores/editor';
+  import { activeTab } from '../stores/uiStore';
+  import { currentProject, STYLE_PRESETS } from '../stores/projectStore';
+  import { aiContent } from '../stores/aiContentStore';
   import { Type, Palette, Film, Sparkles, Check, Loader2, Plus } from 'lucide-svelte';
   import { cn } from '../utils';
 
@@ -75,40 +77,40 @@
   }
 </script>
 
-<div class="h-full flex flex-col bg-gray-50">
+<div class="h-full flex flex-col bg-dark-light">
   <!-- Tab Content -->
   {#if $activeTab === 'captions'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg text-gray-900">Caption Settings</h3>
+      <h3 class="font-semibold text-lg text-white">Caption Settings</h3>
       
       <div class="space-y-3">
-        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition">
-          <span class="text-gray-700">Word-by-word highlighting</span>
+        <label class="flex items-center justify-between p-3 bg-dark-lighter rounded-lg border border-dark-lighter cursor-pointer hover:border-primary transition">
+          <span class="text-dark-text-light">Word-by-word highlighting</span>
           <input 
             type="checkbox" 
             checked={$currentProject?.style?.wordByWord}
             on:change={(e) => currentProject.updateStyle({ wordByWord: e.target.checked })}
-            class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            class="w-5 h-5 rounded border-dark-lighter text-primary focus:ring-primary"
           />
         </label>
 
-        <label class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 cursor-pointer hover:border-gray-300 transition">
-          <span class="text-gray-700">Highlight active words</span>
+        <label class="flex items-center justify-between p-3 bg-dark-lighter rounded-lg border border-dark-lighter cursor-pointer hover:border-primary transition">
+          <span class="text-dark-text-light">Highlight active words</span>
           <input 
             type="checkbox" 
             checked={$currentProject?.style?.highlightWords}
             on:change={(e) => currentProject.updateStyle({ highlightWords: e.target.checked })}
-            class="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            class="w-5 h-5 rounded border-dark-lighter text-primary focus:ring-primary"
           />
         </label>
 
         {#if $currentProject?.style?.highlightWords}
           <div class="space-y-2">
-            <label class="text-sm text-gray-600">Highlight Color</label>
+            <label class="text-sm text-dark-text-light">Highlight Color</label>
             <div class="flex gap-2">
               {#each ['#FFD700', '#FF6B6B', '#00F5FF', '#FF00FF', '#00FF00'] as color}
                 <button
-                  class="w-8 h-8 rounded-lg border-2 transition {($currentProject?.style?.highlightColor || '#FFD700') === color ? 'border-gray-900 scale-110' : 'border-transparent hover:border-gray-300'}"
+                  class="w-8 h-8 rounded-lg border-2 transition {($currentProject?.style?.highlightColor || '#FFD700') === color ? 'border-primary scale-110' : 'border-transparent hover:border-primary-light'}"
                   style="background-color: {color}"
                   on:click={() => currentProject.updateStyle({ highlightColor: color })}
                 />
@@ -122,15 +124,15 @@
   {:else if $activeTab === 'style'}
     <div class="p-4 space-y-6 overflow-y-auto">
       <div>
-        <h3 class="font-semibold text-lg text-gray-900 mb-3">Style Presets</h3>
+        <h3 class="font-semibold text-lg text-white mb-3">Style Presets</h3>
         <div class="grid grid-cols-2 gap-2">
           {#each Object.entries(STYLE_PRESETS) as [name, preset]}
             <button
-              class="p-3 bg-white rounded-lg border border-gray-200 text-left hover:border-gray-300 transition text-sm"
+              class="p-3 bg-dark-lighter rounded-lg border border-dark-lighter text-left hover:border-primary transition text-sm"
               on:click={() => currentProject.applyPreset(name)}
             >
-              <div class="font-medium capitalize text-gray-900">{name.replace('-', ' ')}</div>
-              <div class="text-xs text-gray-500 mt-1">
+              <div class="font-medium capitalize text-white">{name.replace('-', ' ')}</div>
+              <div class="text-xs text-dark-text-light mt-1">
                 {preset.fontWeight} • {preset.animation}
               </div>
             </button>
@@ -139,14 +141,14 @@
       </div>
 
       <div class="space-y-4">
-        <h3 class="font-semibold text-lg text-gray-900">Typography</h3>
+        <h3 class="font-semibold text-lg text-white">Typography</h3>
         
         <div class="space-y-2">
-          <label class="text-sm text-gray-600">Font Family</label>
+          <label class="text-sm text-dark-text-light">Font Family</label>
           <select 
             value={$currentProject?.style?.fontFamily || 'Inter'}
             on:change={(e) => currentProject.updateStyle({ fontFamily: e.target.value })}
-            class="w-full p-2 bg-white rounded-lg border border-gray-200 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            class="w-full p-2 bg-dark-lighter rounded-lg border border-dark-lighter text-white focus:border-primary focus:ring-1 focus:ring-primary"
           >
             {#each fonts as font}
               <option value={font}>{font}</option>
@@ -155,9 +157,9 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-600 flex justify-between">
+          <label class="text-sm text-dark-text-light flex justify-between">
             <span>Font Size</span>
-            <span class="text-gray-900">{$currentProject?.style?.fontSize || 42}px</span>
+            <span class="text-white">{$currentProject?.style?.fontSize || 42}px</span>
           </label>
           <input 
             type="range" 
@@ -170,11 +172,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-600">Position</label>
+          <label class="text-sm text-dark-text-light">Position</label>
           <div class="flex gap-2">
             {#each positions as pos}
               <button
-                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.position || 'bottom') === pos.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'}"
+                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.position || 'bottom') === pos.id ? 'bg-primary text-white border-primary' : 'bg-dark-lighter text-dark-text-light border-dark-lighter hover:border-primary'}"
                 on:click={() => currentProject.updateStyle({ position: pos.id })}
               >
                 {pos.label}
@@ -184,11 +186,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-600">Animation</label>
+          <label class="text-sm text-dark-text-light">Animation</label>
           <select 
             value={$currentProject?.style?.animation || 'pop'}
             on:change={(e) => currentProject.updateStyle({ animation: e.target.value })}
-            class="w-full p-2 bg-white rounded-lg border border-gray-200 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            class="w-full p-2 bg-dark-lighter rounded-lg border border-dark-lighter text-white focus:border-primary focus:ring-1 focus:ring-primary"
           >
             {#each animations as anim}
               <option value={anim.id}>{anim.label}</option>
@@ -197,11 +199,11 @@
         </div>
 
         <div class="space-y-2">
-          <label class="text-sm text-gray-600">Text Shadow</label>
+          <label class="text-sm text-dark-text-light">Text Shadow</label>
           <div class="flex gap-2">
             {#each ['none', 'light', 'medium', 'heavy'] as shadow}
               <button
-                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.textShadow || 'medium') === shadow ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'}"
+                class="flex-1 p-2 rounded-lg border text-sm transition {($currentProject?.style?.textShadow || 'medium') === shadow ? 'bg-primary text-white border-primary' : 'bg-dark-lighter text-dark-text-light border-dark-lighter hover:border-primary'}"
                 on:click={() => currentProject.updateStyle({ textShadow: shadow })}
               >
                 {shadow}
@@ -214,20 +216,20 @@
 
   {:else if $activeTab === 'broll'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg text-gray-900">B-Roll Library</h3>
+      <h3 class="font-semibold text-lg text-white">B-Roll Library</h3>
       
       <div class="flex gap-2">
         <input 
           type="text" 
           bind:value={searchQuery}
           placeholder="Search stock footage..."
-          class="flex-1 p-2 bg-white rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+          class="flex-1 p-2 bg-dark-lighter rounded-lg border border-dark-lighter text-white placeholder-dark-text-light focus:border-primary focus:ring-1 focus:ring-primary"
           on:keydown={(e) => e.key === 'Enter' && searchBRoll()}
         />
         <button 
           on:click={searchBRoll}
           disabled={searching}
-          class="p-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
+          class="p-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition disabled:opacity-50"
         >
           {#if searching}
             <Loader2 class="w-5 h-5 animate-spin" />
@@ -258,12 +260,12 @@
 
   {:else if $activeTab === 'ai-tools'}
     <div class="p-4 space-y-4">
-      <h3 class="font-semibold text-lg text-gray-900">AI Magic Tools</h3>
+      <h3 class="font-semibold text-lg text-white">AI Magic Tools</h3>
       
       <button
         on:click={generateAIContent}
         disabled={generatingAI}
-        class="w-full p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg font-medium text-white hover:from-blue-700 hover:to-purple-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+        class="w-full p-4 bg-gradient-to-r from-primary to-secondary rounded-lg font-medium text-white hover:from-primary-dark hover:to-secondary-dark transition disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {#if generatingAI}
           <Loader2 class="w-5 h-5 animate-spin" />
@@ -276,23 +278,23 @@
 
       {#if $aiContent}
         <div class="space-y-4">
-          <div class="p-3 bg-white rounded-lg border border-gray-200">
-            <h4 class="font-medium text-sm text-gray-600 mb-2">Hook Ideas</h4>
+          <div class="p-3 bg-dark-lighter rounded-lg border border-dark-lighter">
+            <h4 class="font-medium text-sm text-dark-text-light mb-2">Hook Ideas</h4>
             <ul class="space-y-2">
               {#each $aiContent.hooks as hook}
-                <li class="text-sm p-2 bg-gray-50 rounded text-gray-900">{hook}</li>
+                <li class="text-sm p-2 bg-dark rounded text-white">{hook}</li>
               {/each}
             </ul>
           </div>
 
-          <div class="p-3 bg-white rounded-lg border border-gray-200">
-            <h4 class="font-medium text-sm text-gray-600 mb-2">Description</h4>
-            <p class="text-sm text-gray-900">{$aiContent.descriptions[0]}</p>
+          <div class="p-3 bg-dark-lighter rounded-lg border border-dark-lighter">
+            <h4 class="font-medium text-sm text-dark-text-light mb-2">Description</h4>
+            <p class="text-sm text-white">{$aiContent.descriptions[0]}</p>
           </div>
 
-          <div class="p-3 bg-white rounded-lg border border-gray-200">
-            <h4 class="font-medium text-sm text-gray-600 mb-2">Hashtags</h4>
-            <p class="text-sm text-blue-600">{$aiContent.hashtags.join(' ')}</p>
+          <div class="p-3 bg-dark-lighter rounded-lg border border-dark-lighter">
+            <h4 class="font-medium text-sm text-dark-text-light mb-2">Hashtags</h4>
+            <p class="text-sm text-primary">{$aiContent.hashtags.join(' ')}</p>
           </div>
         </div>
       {/if}

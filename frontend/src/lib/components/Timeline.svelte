@@ -1,5 +1,7 @@
 <script>
-  import { currentProject, videoState, uiState } from '../stores/editor';
+  import { currentProject } from '../stores/projectStore';
+  import { videoState } from '../stores/videoPlayerStore';
+  import { uiState } from '../stores/uiStore';
   import { Film } from 'lucide-svelte';
   import { formatTime } from '../utils';
 
@@ -40,10 +42,10 @@
   }
 </script>
 
-<div class="h-full flex flex-col bg-white">
+<div class="h-full flex flex-col bg-dark">
   <!-- Timeline Header -->
-  <div class="h-10 border-b border-gray-200 flex items-center justify-center px-2 bg-gray-50">
-    <span class="text-xs font-medium text-gray-600 transform -rotate-90 whitespace-nowrap">Timeline</span>
+  <div class="h-10 border-b border-dark-lighter flex items-center justify-center px-2 bg-dark-light">
+    <span class="text-xs font-medium text-dark-text-light transform -rotate-90 whitespace-nowrap">Timeline</span>
   </div>
 
   <!-- Vertical Timeline Track -->
@@ -58,7 +60,7 @@
       <div class="absolute inset-0 pointer-events-none">
         {#each Array(Math.max(1, Math.ceil(duration / 10))) as _, i}
           <div 
-            class="absolute left-0 right-0 border-t border-gray-200"
+            class="absolute left-0 right-0 border-t border-dark-lighter"
             style="top: {(i * 10 / duration) * 100}%"
           />
         {/each}
@@ -68,7 +70,7 @@
       <div class="absolute top-0 bottom-0 left-2 right-2">
         {#each captions as caption}
           <button
-            class="absolute left-0 right-0 rounded bg-blue-100 border-2 border-blue-300 hover:bg-blue-200 transition flex flex-col items-center justify-center px-1 overflow-hidden text-xs text-blue-900 {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-blue-500' : ''}"
+            class="absolute left-0 right-0 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-center px-1 overflow-hidden text-xs text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
             style={getCaptionStyle(caption)}
             on:click|stopPropagation={() => handleCaptionClick(caption)}
             title={caption.text}
@@ -85,10 +87,10 @@
         <div class="absolute top-0 bottom-0 left-1 right-1">
           {#each $currentProject.bRollClips as clip}
             <div
-              class="absolute left-0 right-0 rounded bg-purple-100 border-2 border-purple-300 flex items-center justify-center overflow-hidden"
+              class="absolute left-0 right-0 rounded bg-secondary border-2 border-secondary flex items-center justify-center overflow-hidden"
               style="top: {(clip.start / duration) * 100}%; height: {(clip.duration / duration) * 100}%;"
             >
-              <Film class="w-3 h-3 text-purple-700" />
+              <Film class="w-3 h-3 text-white" />
             </div>
           {/each}
         </div>
@@ -105,8 +107,8 @@
   </div>
 
   <!-- Time Display -->
-  <div class="h-10 border-t border-gray-200 flex items-center justify-center bg-gray-50">
-    <span class="text-xs font-mono text-gray-600 transform -rotate-90 whitespace-nowrap">
+  <div class="h-10 border-t border-dark-lighter flex items-center justify-center bg-dark-light">
+    <span class="text-xs font-mono text-dark-text-light transform -rotate-90 whitespace-nowrap">
       {formatTime(currentTime)}
     </span>
   </div>

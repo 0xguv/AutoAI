@@ -1,6 +1,8 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { currentProject, videoState, activeCaption, activeWord } from '../stores/editor';
+  import { currentProject } from '../stores/projectStore';
+  import { videoState } from '../stores/videoPlayerStore';
+  import { activeCaption, activeWord } from '../stores/derivedStores';
   import { getTextShadowCSS, getAnimationCSS } from '../utils';
 
   let videoElement;
@@ -142,7 +144,7 @@
       on:click={togglePlay}
     >
       <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-        <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
+        <svg class="w-8 h-8 text-dark ml-1" fill="currentColor" viewBox="0 0 24 24">
           <path d="M8 5v14l11-7z"/>
         </svg>
       </div>

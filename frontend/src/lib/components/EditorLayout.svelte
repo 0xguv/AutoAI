@@ -1,31 +1,31 @@
 <script>
-  import { uiState } from '../stores/editor';
+  import { uiState } from '../stores/uiStore';
 </script>
 
-<div class="flex h-screen w-full bg-white">
+<div class="flex h-screen w-full bg-dark">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-16 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+  <aside class="w-16 flex-shrink-0 border-r border-dark-lighter bg-dark-light">
     <slot name="sidebar" />
   </aside>
 
   <!-- Left Editing Panel (moved from right) -->
-  <aside class="w-80 flex-shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto">
+  <aside class="w-80 flex-shrink-0 border-r border-dark-lighter bg-dark-light overflow-y-auto">
     <slot name="panel" />
   </aside>
 
   <!-- Main Content Area -->
   <div class="flex-1 flex min-w-0">
     <!-- Center Workspace -->
-    <div class="flex-1 flex flex-col min-w-0 bg-gray-100">
+    <div class="flex-1 flex flex-col min-w-0 bg-dark">
       <!-- Top Toolbar -->
-      <header class="h-14 border-b border-gray-200 flex items-center justify-between px-4 bg-white">
+      <header class="h-14 border-b border-dark-lighter flex items-center justify-between px-4 bg-dark-light">
         <div class="flex items-center gap-4">
-          <h1 class="font-semibold text-lg text-gray-900">Video Editor</h1>
-          <span class="text-xs text-gray-400">Auto-save enabled</span>
+          <h1 class="font-semibold text-lg text-dark-text-light">Video Editor</h1>
+          <span class="text-xs text-dark-text">Auto-save enabled</span>
         </div>
         <div class="flex items-center gap-2">
           <button 
-            class="px-4 py-2 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition flex items-center gap-2"
+            class="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-dark transition flex items-center gap-2"
             on:click={() => uiState.update(u => ({ ...u, isExporting: true }))}
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,7 +43,7 @@
     </div>
 
     <!-- Right Vertical Timeline -->
-    <aside class="w-20 flex-shrink-0 border-l border-gray-200 bg-white">
+    <aside class="w-20 flex-shrink-0 border-l border-dark-lighter bg-dark-light">
       <slot name="timeline" />
     </aside>
   </div>

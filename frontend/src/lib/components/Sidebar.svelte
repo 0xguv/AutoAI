@@ -1,5 +1,5 @@
 <script>
-  import { activeTab } from '../stores/editor';
+  import { activeTab } from '../stores/uiStore';
   import { Type, Palette, Film, Sparkles } from 'lucide-svelte';
 
   const tabs = [
@@ -14,10 +14,10 @@
   }
 </script>
 
-<div class="flex flex-col h-full">
+<div class="flex flex-col h-full bg-dark-light text-dark-text">
   <!-- Logo -->
-  <div class="h-14 flex items-center justify-center border-b border-gray-200">
-    <a href="/" class="text-gray-900">
+  <div class="h-14 flex items-center justify-center border-b border-dark-lighter">
+    <a href="/" class="text-primary">
       <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 6v12"/>
@@ -30,14 +30,14 @@
   <nav class="flex-1 flex flex-col items-center py-4 gap-1">
     {#each tabs as tab}
       <button
-        class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 group relative {$activeTab === tab.id ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200'}"
+        class="w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 group relative {$activeTab === tab.id ? 'bg-primary-dark text-white' : 'text-dark-text-light hover:text-white hover:bg-dark-lighter'}"
         on:click={() => activeTab.set(tab.id)}
         title={tab.label}
       >
         <svelte:component this={tab.icon} class="w-5 h-5" />
         
         <!-- Tooltip -->
-        <span class="absolute left-14 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-50">
+        <span class="absolute left-14 px-2 py-1 bg-dark-lighter text-white text-xs rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-50">
           {tab.label}
         </span>
       </button>
@@ -45,10 +45,10 @@
   </nav>
 
   <!-- Bottom Actions -->
-  <div class="flex flex-col items-center py-4 gap-2 border-t border-gray-200">
+  <div class="flex flex-col items-center py-4 gap-2 border-t border-dark-lighter">
     <a 
       href="/profile"
-      class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:text-gray-900 hover:bg-gray-200 transition"
+      class="w-12 h-12 rounded-xl text-dark-text-light flex items-center justify-center hover:text-white hover:bg-dark-lighter transition"
       title="Profile"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -57,7 +57,7 @@
     </a>
     
     <button 
-      class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:text-red-600 hover:bg-red-50 transition"
+      class="w-12 h-12 rounded-xl text-dark-text-light flex items-center justify-center hover:text-danger hover:bg-dark-lighter transition"
       on:click={handleLogout}
       title="Logout"
     >

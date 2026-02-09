@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable } from 'svelte/store';
 
 // Style Presets
 export const STYLE_PRESETS = {
@@ -84,9 +84,6 @@ export const DEFAULT_STYLE = {
   wordByWord: false
 };
 
-// Active tab store
-export const activeTab = writable('captions');
-
 // Current project store
 function createProjectStore() {
   const { subscribe, set, update } = writable(null);
@@ -150,59 +147,3 @@ function createProjectStore() {
 }
 
 export const currentProject = createProjectStore();
-
-// Video player state
-function createVideoStore() {
-  const { subscribe, set, update } = writable({
-    currentTime: 0,
-    duration: 0,
-    isPlaying: false,
-    volume: 1,
-    playbackRate: 1
-  });
-
-  return {
-    subscribe,
-    set,
-    update,
-    setCurrentTime: (time) => update(v => ({ ...v, currentTime: time })),
-    setPlaying: (playing) => update(v => ({ ...v, isPlaying: playing })),
-    togglePlay: () => update(v => ({ ...v, isPlaying: !v.isPlaying }))
-  };
-}
-
-export const videoState = createVideoStore();
-
-// UI State
-export const uiState = writable({
-  isExporting: false,
-  exportProgress: 0,
-  selectedCaptionId: null,
-  showPreview: true,
-  sidebarOpen: true,
-  activeWordIndex: -1
-});
-
-// AI Generated content store
-export const aiContent = writable(null);
-
-// Derived stores
-export const activeCaption = derived(
-  [currentProject, videoState],
-  ([$project, $video]) => {
-    if (!$project) return null;
-    return $project.captions.find(c => 
-      $video.currentTime >= c.start && $video.currentTime <= c.end
-    ) || null;
-  }
-);
-
-export const activeWord = derived(
-  [activeCaption, videoState],
-  ([$caption, $video]) => {
-    if (!$caption || !$caption.words) return null;
-    return $caption.words.find(w => 
-      $video.currentTime >= w.start && $video.currentTime <= w.end
-    ) || null;
-  }
-);
