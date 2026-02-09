@@ -1222,16 +1222,9 @@ def edit_video(job_id):
         flash(f'Video is not ready for editing (current status: {job_entry.status}).', 'error')
         return redirect(url_for('index'))
 
-    video_url = url_for('download_file', filename=os.path.basename(job_entry.original_video_filepath))
-    srt_url = url_for('download_file', filename=os.path.basename(job_entry.generated_srt_filepath))
-    
-    # Read SRT content directly to pass to the template for initial display
-    srt_content = ""
-    try:
-        with open(job_entry.generated_srt_filepath, "r", encoding="utf-8") as f:
-            srt_content = f.read()
-    except FileNotFoundError:
-        flash('Generated SRT file not found.', 'error')
+    # Check if word-level captions exist in database
+    if not job_entry.word_level_captions_json:
+        flash('Transcription data not found.', 'error')
         return redirect(url_for('index'))
 
     job_entry.status = 'editing' # Update status to indicate it's being edited
