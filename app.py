@@ -1349,6 +1349,27 @@ def create_tables():
                         app.logger.info("Added subtitle_pos_y column")
             except Exception as migration_error:
                 app.logger.warning(f"Migration warning (may already exist): {migration_error}")
+            
+            # Migration: Add subscription_tier to user table and remove old columns
+            try:
+                from sqlalchemy import inspect
+                inspector = inspect(db.engine)
+                user_columns = [col['name'] for col in inspector.get_columns('user')]
+                
+                # Add subscription_tier if it doesn't exist
+                if 'subscription_tier' not in user_columns:
+                    with db.engine.connect() as conn:
+                        conn.execute(db.text("ALTER TABLE \"user\" ADD COLUMN subscription_tier VARCHAR(50) DEFAULT 'free'"))
+                        conn.commit()
+                        app.logger.info("Added subscription_tier column to user table")
+                
+                # Set default values for existing users
+                with db.engine.connect() as conn:
+                    conn.execute(db.text("UPDATE \"user\" SET subscription_tier = 'free' WHERE subscription_tier IS NULL"))
+                    conn.commit()
+                    
+            except Exception as migration_error:
+                app.logger.warning(f"User table migration warning: {migration_error}")
                 
         except Exception as e:
             app.logger.error(f"Error creating database tables: {e}")
