@@ -14,9 +14,9 @@
     {% if current_user.is_authenticated %}
     <!-- Modern Sidebar matching Editor -->
     <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 shadow-sm" id="main-sidebar">
-        <!-- Logo - redirects to editor-new -->
+        <!-- Logo - redirects to home -->
         <div class="mb-8">
-            <a href="{{ url_for('editor_new') }}" class="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center hover:bg-gray-800 transition-colors">
+            <a href="{{ url_for('index') }}" class="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center hover:bg-gray-800 transition-colors">
                 <!-- Coin Icon -->
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M9 9h6v6H9z"/></svg>
             </a>
