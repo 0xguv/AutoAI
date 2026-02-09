@@ -6,32 +6,41 @@
   let timelineRef;
   let isDragging = false;
 
-  $: duration = $currentProject?.videoDuration || 0;
+  $: duration = $currentProject?.videoDuration || 1; // Prevent division by zero
   $: captions = $currentProject?.captions || [];
   $: currentTime = $videoState.currentTime;
   $: zoom = 50;
 
   function handleTimelineClick(e) {
+    if (!timelineRef || duration <= 0) return;
+    
     const rect = timelineRef.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const time = (x / rect.width) * duration;
-    videoState.setCurrentTime(Math.max(0, Math.min(time, duration)));
+    const percentage = Math.max(0, Math.min(1, x / rect.width));
+    const time = percentage * duration;
+    
+    videoState.setCurrentTime(time);
+    
+    // Dispatch custom event for VideoPreview to seek
+    window.dispatchEvent(new CustomEvent('timeline-seek', { detail: { time } }));
   }
 
   function handleCaptionClick(caption) {
     uiState.update(u => ({ ...u, selectedCaptionId: caption.id }));
     videoState.setCurrentTime(caption.start);
+    window.dispatchEvent(new CustomEvent('timeline-seek', { detail: { time: caption.start } }));
   }
 
   function getCaptionStyle(caption) {
     const left = (caption.start / duration) * 100;
     const width = ((caption.end - caption.start) / duration) * 100;
-    return `left: ${left}%; width: ${width}%;`;
+    return `left: ${left}%; width: ${Math.max(0.5, width)}%;`;
   }
 
   function getPlayheadStyle() {
+    if (!duration || duration <= 0) return 'left: 0%;';
     const left = (currentTime / duration) * 100;
-    return `left: ${left}%;`;
+    return `left: ${Math.max(0, Math.min(100, left))}%;`;
   }
 </script>
 
@@ -48,20 +57,15 @@
 
   <!-- Timeline Tracks -->
   <div class="flex-1 relative overflow-x-auto overflow-y-hidden">
-    <div 
+    <button
       bind:this={timelineRef}
-      class="absolute inset-0 min-w-full cursor-pointer"
+      class="absolute inset-0 min-w-full cursor-pointer bg-transparent border-none p-0"
       on:click={handleTimelineClick}
-      role="slider"
-      aria-label="Timeline"
-      aria-valuemin={0}
-      aria-valuemax={duration}
-      aria-valuenow={currentTime}
-      tabindex="0"
+      aria-label="Timeline scrubber"
     >
       <!-- Time Grid -->
       <div class="absolute inset-0 pointer-events-none">
-        {#each Array(Math.ceil(duration / 5)) as _, i}
+        {#each Array(Math.max(1, Math.ceil(duration / 5))) as _, i}
           <div 
             class="absolute top-0 bottom-0 border-l border-gray-200"
             style="left: {(i * 5 / duration) * 100}%"
@@ -99,12 +103,12 @@
 
       <!-- Playhead -->
       <div 
-        class="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
+        class="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none transition-all duration-75 ease-linear"
         style={getPlayheadStyle()}
       >
         <div class="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full" />
       </div>
-    </div>
+    </button>
   </div>
 
   <!-- Zoom Controls -->

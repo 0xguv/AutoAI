@@ -14,6 +14,9 @@
   $: currentTime = $videoState.currentTime;
 
   onMount(() => {
+    // Listen for timeline seek events
+    window.addEventListener('timeline-seek', handleTimelineSeek);
+    
     if (videoElement) {
       videoElement.addEventListener('timeupdate', handleTimeUpdate);
       videoElement.addEventListener('loadedmetadata', handleMetadata);
@@ -22,6 +25,7 @@
     }
 
     return () => {
+      window.removeEventListener('timeline-seek', handleTimelineSeek);
       if (videoElement) {
         videoElement.removeEventListener('timeupdate', handleTimeUpdate);
         videoElement.removeEventListener('loadedmetadata', handleMetadata);
@@ -29,6 +33,12 @@
       cancelAnimationFrame(animationFrame);
     };
   });
+
+  function handleTimelineSeek(event) {
+    if (videoElement && event.detail && typeof event.detail.time === 'number') {
+      videoElement.currentTime = event.detail.time;
+    }
+  }
 
   function handleTimeUpdate() {
     if (videoElement) {
@@ -100,6 +110,7 @@
     class="w-full h-full object-contain"
     on:click={togglePlay}
     crossorigin="anonymous"
+    playsinline
   >
     <track kind="captions" />
   </video>
