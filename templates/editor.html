@@ -30,7 +30,6 @@
         background: #000;
         border-radius: 12px;
         overflow: hidden;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         border: 1px solid #e5e7eb;
         width: 100%;
         max-width: 100%;
@@ -153,9 +152,8 @@
         width: auto;
         min-width: 200px;
         max-width: 80%;
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
         border: 2px solid transparent;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: border-color 0.2s ease;
         backdrop-filter: blur(4px);
         white-space: nowrap;
     }
@@ -164,13 +162,11 @@
         background: rgba(0, 0, 0, 0.95);
         border-color: #10b981;
         cursor: grabbing !important;
-        box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
     }
 
     .editor-sidebar {
         background: #ffffff;
         border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         overflow: hidden;
         display: flex;
         flex-direction: column;
@@ -243,13 +239,11 @@
     .subtitle-line:hover {
         border-color: #10b981;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
     }
 
     .subtitle-line.active {
         border-color: #10b981;
         background: #ecfdf5;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
     }
 
     .subtitle-line::before {
@@ -290,7 +284,6 @@
     .subtitle-line textarea:focus {
         outline: none;
         border-color: #10b981;
-        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
     }
 
     .subtitle-line.active textarea {

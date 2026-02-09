@@ -13,7 +13,7 @@
 <body class="bg-gray-50 font-sans">
     {% if current_user.is_authenticated %}
     <!-- Modern Sidebar matching Editor -->
-    <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 shadow-sm" id="main-sidebar">
+    <aside class="fixed left-0 top-0 h-full w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 z-50 " id="main-sidebar">
         <!-- Logo - redirects to home -->
         <div class="mb-8">
             <a href="{{ url_for('index') }}" class="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center hover:bg-gray-800 transition-colors">
@@ -92,7 +92,7 @@
     </div>
 
     <div id="processing-overlay" class="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-[1050] hidden"></div>
-    <div id="processing-popup" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-white px-6 py-4 rounded-lg shadow-lg flex items-center space-x-2 z-[1060] hidden max-w-md">
+    <div id="processing-popup" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gray-800 text-white px-6 py-4 rounded-lg  flex items-center space-x-2 z-[1060] hidden max-w-md">
         <i class="fas fa-robot text-2xl animate-spin"></i>
         <span>Beep. Boop.</span>
     </div>
