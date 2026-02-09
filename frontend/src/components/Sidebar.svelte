@@ -25,14 +25,6 @@
     </a>
     
     <a 
-      href="/editor-new" 
-      class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
-      title="New Editor"
-    >
-      <Video class="w-5 h-5" />
-    </a>
-    
-    <a 
       href="/profile" 
       class="w-12 h-12 rounded-xl text-gray-500 flex items-center justify-center hover:bg-gray-100 hover:text-gray-900 transition-colors"
       title="Profile"
