@@ -1177,6 +1177,308 @@ def create_tables():
             app.logger.error(f"Error creating database tables: {e}")
         create_tables.has_run = True
 
+# Enhanced API Endpoints for Submagic-Style Editor
+
+@app.route('/api/ai/generate', methods=['POST'])
+@login_required
+def generate_ai_content():
+    """Generate viral hooks, descriptions, and hashtags using GPT-4o"""
+    data = request.get_json()
+    transcript = data.get('transcript', '')
+    
+    if not transcript:
+        return jsonify({"error": "Transcript required"}), 400
+    
+    try:
+        import openai
+        openai.api_key = os.environ.get('OPENAI_API_KEY')
+        
+        if not openai.api_key:
+            # Fallback mock data if no API key
+            return jsonify({
+                "hooks": [
+                    "You won't believe what happens next...",
+                    "This changed everything for me",
+                    "Stop doing this mistake right now"
+                ],
+                "descriptions": [
+                    f"An amazing video about: {transcript[:100]}..."
+                ],
+                "hashtags": ["#viral", "#trending", "#fyp", "#contentcreator", "#video"]
+            })
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "system",
+                "content": "You are a viral content strategist. Generate engaging hooks, descriptions, and hashtags."
+            }, {
+                "role": "user",
+                "content": f"Based on this transcript, generate:\n1. Three viral hook ideas\n2. One compelling description\n3. Ten relevant hashtags\n\nTranscript: {transcript[:2000]}"
+            }]
+        )
+        
+        content = response.choices[0].message.content
+        
+        # Parse the response
+        lines = content.split('\n')
+        hooks = [l.strip('- ') for l in lines if l.strip().startswith('-') or l.strip().startswith('1.') or l.strip().startswith('2.') or l.strip().startswith('3.')][:3]
+        description = next((l for l in lines if 'description' in l.lower() or len(l) > 50), transcript[:150])
+        hashtags = [tag.strip() for tag in content.split() if tag.startswith('#')][:10]
+        
+        return jsonify({
+            "hooks": hooks if hooks else ["Amazing content!", "Don't miss this", "Watch till the end"],
+            "descriptions": [description],
+            "hashtags": hashtags if hashtags else ["#viral", "#trending"]
+        })
+        
+    except Exception as e:
+        app.logger.error(f"AI generation error: {e}")
+        return jsonify({
+            "hooks": ["Amazing content!", "Don't miss this", "Watch till the end"],
+            "descriptions": [transcript[:150] + "..."],
+            "hashtags": ["#viral", "#trending", "#fyp"]
+        })
+
+@app.route('/api/broll/search')
+@login_required
+def search_broll():
+    """Search for B-roll footage from Pexels/Pixabay"""
+    query = request.args.get('q', '')
+    
+    if not query:
+        return jsonify({"results": []})
+    
+    results = []
+    
+    # Try Pexels API
+    pexels_key = os.environ.get('PEXELS_API_KEY')
+    if pexels_key:
+        try:
+            response = requests.get(
+                'https://api.pexels.com/videos/search',
+                headers={'Authorization': pexels_key},
+                params={'query': query, 'per_page': 8, 'orientation': 'portrait'}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                for video in data.get('videos', []):
+                    video_files = video.get('video_files', [])
+                    if video_files:
+                        results.append({
+                            'id': str(video['id']),
+                            'video_url': video_files[0]['link'],
+                            'thumbnail': video['image'],
+                            'source': 'pexels',
+                            'duration': video.get('duration', 15)
+                        })
+        except Exception as e:
+            app.logger.error(f"Pexels search error: {e}")
+    
+    # Try Pixabay API as fallback
+    pixabay_key = os.environ.get('PIXABAY_API_KEY')
+    if pixabay_key and len(results) < 5:
+        try:
+            response = requests.get(
+                'https://pixabay.com/api/videos/',
+                params={
+                    'key': pixabay_key,
+                    'q': query,
+                    'per_page': 8 - len(results),
+                    'orientation': 'vertical'
+                }
+            )
+            if response.status_code == 200:
+                data = response.json()
+                for video in data.get('hits', []):
+                    results.append({
+                        'id': str(video['id']),
+                        'video_url': video['videos']['medium']['url'],
+                        'thumbnail': video['videos']['medium']['thumbnail'],
+                        'source': 'pixabay',
+                        'duration': video.get('duration', 15)
+                    })
+        except Exception as e:
+            app.logger.error(f"Pixabay search error: {e}")
+    
+    # Return mock data if no APIs available
+    if not results:
+        results = [
+            {
+                'id': 'mock1',
+                'video_url': 'https://example.com/video1.mp4',
+                'thumbnail': f'https://source.unsplash.com/300x500/?{query},nature',
+                'source': 'pexels',
+                'duration': 10
+            },
+            {
+                'id': 'mock2',
+                'video_url': 'https://example.com/video2.mp4',
+                'thumbnail': f'https://source.unsplash.com/300x500/?{query},city',
+                'source': 'pixabay',
+                'duration': 15
+            }
+        ]
+    
+    return jsonify({"results": results[:8]})
+
+@app.route('/api/export/<job_id>', methods=['POST'])
+@login_required
+def start_export(job_id):
+    """Start professional video export with FFmpeg"""
+    data = request.get_json()
+    settings = data.get('settings', {})
+    style = data.get('style', {})
+    captions = data.get('captions', [])
+    
+    job_entry = VideoProcessingJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    if not job_entry:
+        return jsonify({"error": "Job not found"}), 404
+    
+    # Create export job
+    export_id = f"export_{job_id}_{int(time.time())}"
+    
+    # Queue the export task
+    from rq import Queue
+    from worker import export_video_task
+    
+    export_queue = Queue('exports', connection=redis_conn)
+    export_job = export_queue.enqueue(
+        export_video_task,
+        job_id=job_id,
+        export_id=export_id,
+        video_path=job_entry.original_video_filepath,
+        captions=captions,
+        style=style,
+        settings=settings,
+        job_timeout='1h'
+    )
+    
+    return jsonify({
+        "export_id": export_id,
+        "job_id": export_job.id,
+        "status": "queued"
+    })
+
+@app.route('/api/export/status/<export_id>')
+@login_required
+def get_export_status(export_id):
+    """Get export job status and progress"""
+    # Check Redis for export status
+    status_key = f"export_status:{export_id}"
+    status_data = redis_conn.get(status_key)
+    
+    if status_data:
+        return jsonify(json.loads(status_data))
+    
+    return jsonify({
+        "export_id": export_id,
+        "status": "processing",
+        "progress": 0,
+        "message": "Initializing..."
+    })
+
+# Enhanced transcription with word-level timestamps
+@app.route('/api/transcribe_word_level', methods=['POST'])
+@login_required
+def transcribe_word_level():
+    """Transcribe video with word-level timestamps using Whisper"""
+    if 'video' not in request.files:
+        return jsonify({"error": "No video file"}), 400
+    
+    video = request.files['video']
+    language = request.form.get('language', None)
+    
+    try:
+        import openai
+        import tempfile
+        
+        openai.api_key = os.environ.get('OPENAI_API_KEY')
+        
+        # Save video temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+            video.save(tmp.name)
+            video_path = tmp.name
+        
+        if not openai.api_key:
+            # Fallback to faster-whisper without word timestamps
+            model = load_faster_whisper_model()
+            segments, info = model.transcribe(video_path, language=language)
+            
+            captions = []
+            for i, segment in enumerate(segments):
+                words = []
+                # Split text into words and estimate timestamps
+                text_words = segment.text.split()
+                duration = segment.end - segment.start
+                word_duration = duration / len(text_words) if text_words else 0
+                
+                for j, word in enumerate(text_words):
+                    words.append({
+                        "text": word,
+                        "start": segment.start + (j * word_duration),
+                        "end": segment.start + ((j + 1) * word_duration),
+                        "confidence": 0.9
+                    })
+                
+                captions.append({
+                    "id": f"caption_{i}",
+                    "text": segment.text.strip(),
+                    "start": segment.start,
+                    "end": segment.end,
+                    "words": words
+                })
+        else:
+            # Use OpenAI Whisper API with word timestamps
+            with open(video_path, 'rb') as f:
+                response = openai.Audio.transcribe(
+                    model="whisper-1",
+                    file=f,
+                    language=language,
+                    response_format="verbose_json",
+                    timestamp_granularities=["word"]
+                )
+            
+            # Parse word-level timestamps
+            words = response.words if hasattr(response, 'words') else []
+            segments = response.segments if hasattr(response, 'segments') else []
+            
+            captions = []
+            for i, segment in enumerate(segments):
+                segment_words = [
+                    w for w in words 
+                    if w.start >= segment.start and w.end <= segment.end
+                ]
+                
+                captions.append({
+                    "id": f"caption_{i}",
+                    "text": segment.text.strip(),
+                    "start": segment.start,
+                    "end": segment.end,
+                    "words": [
+                        {
+                            "text": w.word.strip(),
+                            "start": w.start,
+                            "end": w.end,
+                            "confidence": getattr(w, 'probability', 0.9)
+                        }
+                        for w in segment_words
+                    ]
+                })
+        
+        # Clean up
+        os.unlink(video_path)
+        
+        return jsonify({
+            "status": "success",
+            "captions": captions,
+            "duration": captions[-1]['end'] if captions else 0
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Word-level transcription error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 # Serve Svelte frontend
 @app.route('/editor-new')
 @login_required

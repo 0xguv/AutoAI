@@ -9,3 +9,7 @@ psycopg2-binary
 honcho
 Authlib
 requests
+openai>=1.0.0
+python-dotenv
+tqdm
+numpy

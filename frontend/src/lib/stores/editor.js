@@ -1,0 +1,208 @@
+import { writable, derived } from 'svelte/store';
+
+// Style Presets
+export const STYLE_PRESETS = {
+  'alex-hormozi': {
+    fontFamily: 'Inter',
+    fontWeight: '900',
+    fontSize: 48,
+    color: '#FFFFFF',
+    backgroundColor: 'transparent',
+    textTransform: 'uppercase',
+    textShadow: 'heavy',
+    animation: 'pop',
+    position: 'bottom',
+    alignment: 'center',
+    highlightWords: true,
+    highlightColor: '#FFD700',
+    wordByWord: true,
+    letterSpacing: 2,
+    lineHeight: 1.2
+  },
+  'minimal': {
+    fontFamily: 'Inter',
+    fontWeight: 'normal',
+    fontSize: 36,
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    textTransform: 'none',
+    textShadow: 'light',
+    animation: 'fade',
+    position: 'bottom',
+    alignment: 'center',
+    highlightWords: false,
+    wordByWord: false
+  },
+  'modern-vibe': {
+    fontFamily: 'Inter',
+    fontWeight: 'bold',
+    fontSize: 42,
+    color: '#FFFFFF',
+    backgroundColor: 'transparent',
+    textTransform: 'none',
+    textShadow: 'medium',
+    animation: 'slide-up',
+    position: 'middle',
+    alignment: 'center',
+    highlightWords: true,
+    highlightColor: '#FF6B6B',
+    wordByWord: true
+  },
+  'tiktok-viral': {
+    fontFamily: 'Inter',
+    fontWeight: '900',
+    fontSize: 52,
+    color: '#FFFFFF',
+    backgroundColor: 'transparent',
+    textTransform: 'uppercase',
+    textShadow: 'heavy',
+    animation: 'bounce',
+    position: 'middle',
+    alignment: 'center',
+    highlightWords: true,
+    highlightColor: '#00F5FF',
+    wordByWord: true,
+    letterSpacing: 3
+  }
+};
+
+// Default style
+export const DEFAULT_STYLE = {
+  fontFamily: 'Inter',
+  fontSize: 42,
+  fontWeight: 'bold',
+  color: '#FFFFFF',
+  backgroundColor: 'transparent',
+  textTransform: 'none',
+  textShadow: 'medium',
+  animation: 'pop',
+  position: 'bottom',
+  alignment: 'center',
+  letterSpacing: 0,
+  lineHeight: 1.2,
+  highlightWords: false,
+  wordByWord: false
+};
+
+// Active tab store
+export const activeTab = writable('captions');
+
+// Current project store
+function createProjectStore() {
+  const { subscribe, set, update } = writable(null);
+
+  return {
+    subscribe,
+    set,
+    update,
+    updateCaption: (captionId, updates) => {
+      update(project => {
+        if (!project) return project;
+        const captions = project.captions.map(c => 
+          c.id === captionId ? { ...c, ...updates } : c
+        );
+        return { ...project, captions, updatedAt: new Date() };
+      });
+    },
+    updateStyle: (style) => {
+      update(project => {
+        if (!project) return project;
+        return { 
+          ...project, 
+          style: { ...project.style, ...style },
+          updatedAt: new Date()
+        };
+      });
+    },
+    applyPreset: (presetName) => {
+      update(project => {
+        if (!project) return project;
+        const preset = STYLE_PRESETS[presetName];
+        if (!preset) return project;
+        return {
+          ...project,
+          style: { ...DEFAULT_STYLE, ...preset },
+          updatedAt: new Date()
+        };
+      });
+    },
+    addBRoll: (clip) => {
+      update(project => {
+        if (!project) return project;
+        return {
+          ...project,
+          bRollClips: [...project.bRollClips, clip],
+          updatedAt: new Date()
+        };
+      });
+    },
+    removeBRoll: (clipId) => {
+      update(project => {
+        if (!project) return project;
+        return {
+          ...project,
+          bRollClips: project.bRollClips.filter(c => c.id !== clipId),
+          updatedAt: new Date()
+        };
+      });
+    }
+  };
+}
+
+export const currentProject = createProjectStore();
+
+// Video player state
+function createVideoStore() {
+  const { subscribe, set, update } = writable({
+    currentTime: 0,
+    duration: 0,
+    isPlaying: false,
+    volume: 1,
+    playbackRate: 1
+  });
+
+  return {
+    subscribe,
+    set,
+    update,
+    setCurrentTime: (time) => update(v => ({ ...v, currentTime: time })),
+    setPlaying: (playing) => update(v => ({ ...v, isPlaying: playing })),
+    togglePlay: () => update(v => ({ ...v, isPlaying: !v.isPlaying }))
+  };
+}
+
+export const videoState = createVideoStore();
+
+// UI State
+export const uiState = writable({
+  isExporting: false,
+  exportProgress: 0,
+  selectedCaptionId: null,
+  showPreview: true,
+  sidebarOpen: true,
+  activeWordIndex: -1
+});
+
+// AI Generated content store
+export const aiContent = writable(null);
+
+// Derived stores
+export const activeCaption = derived(
+  [currentProject, videoState],
+  ([$project, $video]) => {
+    if (!$project) return null;
+    return $project.captions.find(c => 
+      $video.currentTime >= c.start && $video.currentTime <= c.end
+    ) || null;
+  }
+);
+
+export const activeWord = derived(
+  [activeCaption, videoState],
+  ([$caption, $video]) => {
+    if (!$caption || !$caption.words) return null;
+    return $caption.words.find(w => 
+      $video.currentTime >= w.start && $video.currentTime <= w.end
+    ) || null;
+  }
+);
