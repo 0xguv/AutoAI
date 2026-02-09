@@ -43,7 +43,7 @@
     </div>
 
     <!-- Right Vertical Timeline -->
-    <aside class="w-20 flex-shrink-0 border-l border-dark-lighter bg-dark-light">
+    <aside class="w-72 flex-shrink-0 border-l border-dark-lighter bg-dark-light">
       <slot name="timeline" />
     </aside>
   </div>

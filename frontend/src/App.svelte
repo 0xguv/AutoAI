@@ -96,7 +96,7 @@
       <div class="flex gap-4 mb-12 animate-bounce-in">
         <button 
           class="flex items-center gap-2 px-8 py-4 bg-primary text-white text-xl font-semibold rounded-xl shadow-lg hover:bg-primary-dark transition-all duration-300 transform hover:-translate-y-1"
-          on:click={() => window.location.href = '/upload'} // Assuming an upload route
+          on:click={() => window.location.href = '/upload'}
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0l-4 4m4-4v12"/>

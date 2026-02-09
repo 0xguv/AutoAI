@@ -110,7 +110,7 @@
 <div class="h-full flex flex-col bg-dark">
   <!-- Timeline Header -->
   <div class="h-10 border-b border-dark-lighter flex items-center justify-center px-2 bg-dark-light">
-    <span class="text-xs font-medium text-dark-text-light transform -rotate-90 whitespace-nowrap">Timeline</span>
+    <span class="text-xs font-medium text-dark-text-light">Timeline</span>
   </div>
 
   <!-- Vertical Timeline Track -->
@@ -135,13 +135,13 @@
       <div class="absolute top-0 bottom-0 left-2 right-2">
         {#each captions as caption}
           <button
-            class="absolute left-0 right-0 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-center px-1 overflow-hidden text-xs text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
+            class="absolute left-0 right-0 mx-1 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-center px-2 overflow-hidden text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
             style={getCaptionStyle(caption)}
             on:click|stopPropagation={() => handleCaptionClick(caption)}
             title={caption.text}
           >
-            <span class="truncate w-full text-center leading-tight" style="font-size: 8px;">
-              {caption.text.slice(0, 20)}{caption.text.length > 20 ? '...' : ''}
+            <span class="truncate w-full text-center leading-tight text-xs">
+              {caption.text.slice(0, 30)}{caption.text.length > 30 ? '...' : ''}
             </span>
           </button>
         {/each}
@@ -210,7 +210,7 @@
 
   <!-- Time Display -->
   <div class="h-10 border-t border-dark-lighter flex items-center justify-center bg-dark-light">
-    <span class="text-xs font-mono text-dark-text-light transform -rotate-90 whitespace-nowrap">
+    <span class="text-xs font-mono text-dark-text-light">
       {formatTime(currentTime)}
     </span>
   </div>

@@ -268,3 +268,7 @@ function createProjectStore() {
         return { ...project, soundEffects: updatedEffects, updatedAt: new Date() };
       });
     }
+  };
+}
+
+export const currentProject = createProjectStore();

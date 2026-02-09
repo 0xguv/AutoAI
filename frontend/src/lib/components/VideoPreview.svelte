@@ -30,6 +30,9 @@
     }
   }
 
+  function handlePlay() { videoState.setPlaying(true); }
+  function handlePause() { videoState.setPlaying(false); }
+
   onMount(() => {
     ctx = canvasElement.getContext('2d');
     
@@ -43,9 +46,9 @@
     if (videoElement) {
       videoElement.addEventListener('timeupdate', handleTimeUpdate);
       videoElement.addEventListener('loadedmetadata', handleMetadata);
-      videoElement.addEventListener('play', () => videoState.setPlaying(true));
-      videoElement.addEventListener('pause', () => videoState.setPlaying(false));
-      videoElement.addEventListener('seeked', drawCaptions); // Redraw after seek
+      videoElement.addEventListener('play', handlePlay);
+      videoElement.addEventListener('pause', handlePause);
+      videoElement.addEventListener('seeked', drawCaptions);
     }
 
     // Start the drawing loop
@@ -56,8 +59,8 @@
       if (videoElement) {
         videoElement.removeEventListener('timeupdate', handleTimeUpdate);
         videoElement.removeEventListener('loadedmetadata', handleMetadata);
-        videoElement.removeEventListener('play', () => videoState.setPlaying(false)); // Fix: Set to false on pause
-        videoElement.removeEventListener('pause', () => videoState.setPlaying(false));
+        videoElement.removeEventListener('play', handlePlay);
+        videoElement.removeEventListener('pause', handlePause);
         videoElement.removeEventListener('seeked', drawCaptions);
       }
       cancelAnimationFrame(animationFrame);
@@ -113,16 +116,21 @@
   }
 
   function drawCaptions() {
-    if (!ctx || !project || !video) {
+    if (!ctx || !canvasElement) {
       animationFrame = requestAnimationFrame(drawCaptions);
       return;
     }
 
-    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height); // Clear canvas
+    ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    const currentTime = video.currentTime;
-    const captions = project.captions || [];
-    const style = project.style || {};
+    const currentTime = video?.currentTime || 0;
+    const captions = project?.captions || [];
+    const style = project?.style || {};
+
+    if (!captions || captions.length === 0) {
+      animationFrame = requestAnimationFrame(drawCaptions);
+      return;
+    }
 
     // Find the active caption (segment)
     const activeCaption = captions.find(c => 
@@ -195,8 +203,40 @@
             }
 
           } else {
-            // Render full caption text
-            ctx.fillText(activeCaption.text, canvasElement.width / 2, yPos);
+            // Render full caption text with wrapping
+            const text = activeCaption.text;
+            const maxWidth = canvasElement.width - 100;
+            const words = text.split(' ');
+            let line = '';
+            const lines = [];
+            
+            for (let n = 0; n < words.length; n++) {
+              const testLine = line + words[n] + ' ';
+              const metrics = ctx.measureText(testLine);
+              const testWidth = metrics.width;
+              if (testWidth > maxWidth && n > 0) {
+                lines.push(line);
+                line = words[n] + ' ';
+              } else {
+                line = testLine;
+              }
+            }
+            lines.push(line);
+            
+            // Draw each line
+            const lineHeight = parseInt(style.fontSize || 42, 10) * 1.2;
+            const totalHeight = lines.length * lineHeight;
+            let startY = yPos - (totalHeight / 2) + (lineHeight / 2);
+            
+            if (style.position === 'bottom') {
+              startY = yPos - totalHeight + lineHeight;
+            } else if (style.position === 'top') {
+              startY = yPos;
+            }
+            
+            lines.forEach((line, index) => {
+              ctx.fillText(line.trim(), canvasElement.width / 2, startY + (index * lineHeight));
+            });
           }
         });
     }
@@ -205,41 +245,40 @@
   }
 
   function drawWordLine(wordsInLine, yPos, lineActualWidth) {
-      let startX = (canvasElement.width / 2) - lineActualWidth / 2; // Center the line
+      let startX = (canvasElement.width / 2) - lineActualWidth / 2;
 
       for (const wordObj of wordsInLine) {
-        const isActiveWord = video.currentTime >= wordObj.start && video.currentTime <= wordObj.end;
+        const isActiveWord = video?.currentTime >= wordObj.start && video?.currentTime <= wordObj.end;
         const wordWidth = ctx.measureText(wordObj.text).width;
         const spacing = ctx.measureText(' ').width;
         
-        ctx.save(); // Save current canvas state
+        ctx.save();
 
         // Apply animation
         if (isActiveWord) {
-            const progress = (video.currentTime - wordObj.start) / (wordObj.end - wordObj.start); // 0 to 1
-            const animationType = project.style.animation;
+            const progress = (video.currentTime - wordObj.start) / (wordObj.end - wordObj.start);
+            const animationType = project?.style?.animation;
 
             switch (animationType) {
                 case 'pop':
-                    const scaleFactor = 1 + Math.sin(progress * Math.PI) * 0.2; // Pop animation (0 to PI)
+                    const scaleFactor = 1 + Math.sin(progress * Math.PI) * 0.2;
                     ctx.translate(startX + wordWidth / 2, yPos);
                     ctx.scale(scaleFactor, scaleFactor);
                     ctx.translate(-(startX + wordWidth / 2), -yPos);
                     break;
                 case 'slide-up':
-                    const translateY = Math.max(0, 1 - progress) * 20; // Slide up 20px
+                    const translateY = Math.max(0, 1 - progress) * 20;
                     ctx.translate(0, -translateY);
                     break;
                 case 'fade':
-                    ctx.globalAlpha = progress; // Fade in
+                    ctx.globalAlpha = progress;
                     break;
                 case 'bounce':
-                    // Simple bounce: scale up then down
                     let bounceScale = 1;
                     if (progress < 0.5) {
-                        bounceScale = 1 + progress * 0.4; // Scale up to 1.2
+                        bounceScale = 1 + progress * 0.4;
                     } else {
-                        bounceScale = 1 + (1 - progress) * 0.4; // Scale down
+                        bounceScale = 1 + (1 - progress) * 0.4;
                     }
                     ctx.translate(startX + wordWidth / 2, yPos);
                     ctx.scale(bounceScale, bounceScale);
@@ -247,32 +286,28 @@
                     break;
                 case 'none':
                 default:
-                    // No animation
                     break;
             }
         }
 
-        let originalFont = ctx.font; // Store original font to restore later
-        let currentFillStyle = project.style.color || '#FFFFFF';
-        let currentBgFillStyle = 'transparent'; // For keyword background
+        let originalFont = ctx.font;
+        let currentFillStyle = project?.style?.color || '#FFFFFF';
+        let currentBgFillStyle = 'transparent';
         let isDrawingHighlightBackground = false;
 
-        if (isActiveWord && project.style.highlightWords) {
-          currentFillStyle = project.style.highlightColor || '#FFD700';
-          currentBgFillStyle = project.style.highlightColor || '#FFD700'; // For active word background
+        if (isActiveWord && project?.style?.highlightWords) {
+          currentFillStyle = project?.style?.highlightColor || '#FFD700';
+          currentBgFillStyle = project?.style?.highlightColor || '#FFD700';
           isDrawingHighlightBackground = true;
-          // Adjust text color for contrast if highlight background is same as text
-          if (project.style.color === project.style.highlightColor) {
-            currentFillStyle = '#000000'; // Black text on color background
+          if (project?.style?.color === project?.style?.highlightColor) {
+            currentFillStyle = '#000000';
           }
         } else if (wordObj.isKeyword) {
-          // Keyword highlighting (persistent)
-          currentFillStyle = project.style.keywordColor || '#EC4899'; // Use secondary color
-          const textHeight = parseInt(project.style.fontSize || 42, 10);
-          ctx.font = `bold ${textHeight}px "${project.style.fontFamily || 'Inter'}", sans-serif`; // Apply bold font weight for keywords
+          currentFillStyle = project?.style?.keywordColor || '#EC4899';
+          const textHeight = parseInt(project?.style?.fontSize || 42, 10);
+          ctx.font = `bold ${textHeight}px "${project?.style?.fontFamily || 'Inter'}", sans-serif`;
         }
 
-        // Draw word background (highlight effect for active words, or optionally for keywords)
         if (isDrawingHighlightBackground) {
           const textMetrics = ctx.measureText(wordObj.text);
           const bgPaddingX = 10;
@@ -286,12 +321,16 @@
           );
         }
         
-        ctx.fillStyle = currentFillStyle; // Apply determined fill style
-        ctx.fillText(wordObj.text, startX, yPos); // Draw the word text
+        ctx.fillStyle = currentFillStyle;
+        ctx.fillText(wordObj.text, startX, yPos);
 
         if (wordObj.isKeyword) {
-            ctx.font = originalFont; // Restore original font after drawing keyword
+            ctx.font = originalFont;
         }
+        
+        ctx.restore();
+        startX += wordWidth + spacing;
+      }
   }
 
   // Helper to convert Tailwind-like text-shadow to Canvas properties
