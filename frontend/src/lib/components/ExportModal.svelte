@@ -14,6 +14,9 @@
   let exportStatus = '';
   let downloadUrl = null;
   let exportComplete = false;
+  
+  // Force reactivity
+  $: console.log('Reactive state - complete:', exportComplete, 'downloading:', downloadUrl);
 
   $: isOpen = $uiState.isExporting;
 
@@ -53,7 +56,8 @@
           const statusRes = await fetch(`/api/export/status/${data.export_id}`);
           const status = await statusRes.json();
           
-          console.log('Export status:', status);
+          console.log('Export status:', JSON.stringify(status));
+          console.log('Status type:', typeof status.status, 'Status value:', status.status);
           
           exportProgress = status.progress || 0;
           exportStatus = status.message || 'Processing...';
