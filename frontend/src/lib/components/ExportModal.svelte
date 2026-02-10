@@ -95,9 +95,13 @@
   async function handleDownload() {
     if (!downloadUrl) return;
     
+    // Ensure full URL
+    const fullUrl = downloadUrl.startsWith('http') ? downloadUrl : `${window.location.origin}${downloadUrl}`;
+    console.log('Downloading from:', fullUrl);
+    
     try {
       // Fetch the file
-      const response = await fetch(downloadUrl);
+      const response = await fetch(fullUrl);
       if (!response.ok) throw new Error('Download failed');
       
       // Get blob
@@ -117,7 +121,7 @@
     } catch (err) {
       console.error('Download error:', err);
       // Fallback: open in new tab
-      window.open(downloadUrl, '_blank');
+      window.open(fullUrl, '_blank');
     }
   }
 
