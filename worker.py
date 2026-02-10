@@ -47,7 +47,7 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
             '-i', video_path,
             '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',  # Fastest encoding
+            '-preset', 'fast',
             '-crf', crf,
             '-r', str(fps),
             '-c:a', 'copy',
@@ -55,20 +55,28 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
             output_path
         ]
         
-        # Run FFmpeg with timeout
+        # Run FFmpeg
+        update_status("processing", 60, "Encoding...")
+        
         try:
-            update_status("processing", 60, "Encoding...")
-            
             process = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=600,  # 10 minute timeout
+                timeout=600,
                 universal_newlines=True
             )
             
-            if process.returncode != 0:
-                raise Exception(f"FFmpeg failed: {process.stderr}")
+            # Log the return code and stderr for debugging
+            print(f"FFmpeg return code: {process.returncode}")
+            if process.stderr:
+                print(f"FFmpeg stderr (last 500 chars): {process.stderr[-500:]}")
+            
+            # Check if output file was created successfully
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                print(f"Output file created successfully: {output_path} ({os.path.getsize(output_path)} bytes)")
+            else:
+                raise Exception(f"Output file not created or empty. FFmpeg stderr: {process.stderr[-500:]}")
                 
         except subprocess.TimeoutExpired:
             raise Exception("FFmpeg timeout - encoding took too long")
@@ -79,6 +87,10 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         final_output = os.path.join(app.config['UPLOAD_FOLDER'], f"{export_id}.mp4")
         os.rename(output_path, final_output)
         
+        # Verify file was moved
+        if not os.path.exists(final_output):
+            raise Exception("Failed to move output file to uploads folder")
+        
         # Generate download URL
         download_url = f"/uploads/{export_id}.mp4"
         
@@ -87,7 +99,9 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         return {"status": "success", "download_url": download_url}
         
     except Exception as e:
-        update_status("failed", 0, f"Export failed: {str(e)}")
+        error_msg = f"Export failed: {str(e)}"
+        print(error_msg)
+        update_status("failed", 0, error_msg)
         raise
 
 # Preload Flask app context for db access within tasks
