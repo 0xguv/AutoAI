@@ -7,11 +7,13 @@
 
   let generatingAI = false;
   let generatingEmojis = false;
-  let generatingBRoll = false; // New state variable
+  let generatingBRoll = false;
+  let generatingEffects = false;
   let searchQuery = '';
   let searchResults = [];
   let searching = false;
-  let suggestedBRoll = []; // To store suggested B-roll clips
+  let suggestedBRoll = [];
+  let suggestedEffects = [];
 
   const fonts = ['Inter', 'Poppins', 'Roboto', 'Oswald', 'Bebas Neue', 'Montserrat'];
   const positions = [
@@ -80,7 +82,7 @@
   async function generateBRollSuggestions() {
     if (!$currentProject || !$currentProject.captions.length) return;
     generatingBRoll = true;
-    suggestedBRoll = []; // Clear previous suggestions
+    suggestedBRoll = [];
     
     try {
       const response = await fetch('/api/ai/generate_broll', {
@@ -91,12 +93,49 @@
       
       if (response.ok) {
         const data = await response.json();
-        suggestedBRoll = data.broll_clips;
+        suggestedBRoll = data.broll_clips || [];
       }
     } catch (err) {
       console.error('B-Roll generation failed:', err);
     } finally {
       generatingBRoll = false;
+    }
+  }
+
+  async function generateEffectsSuggestions() {
+    if (!$currentProject || !$currentProject.captions.length) return;
+    generatingEffects = true;
+    suggestedEffects = [];
+    
+    try {
+      const response = await fetch('/api/ai/generate_effects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ captions: $currentProject.captions, duration: $currentProject.videoDuration })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        suggestedEffects = data.effects || [];
+        
+        // Auto-add zoom effects to project
+        if (data.zoomEffects) {
+          data.zoomEffects.forEach(effect => {
+            currentProject.addZoomEffect(effect);
+          });
+        }
+        
+        // Auto-add sound effects to project
+        if (data.soundEffects) {
+          data.soundEffects.forEach(effect => {
+            currentProject.addSoundEffect(effect);
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Effects generation failed:', err);
+    } finally {
+      generatingEffects = false;
     }
   }
 

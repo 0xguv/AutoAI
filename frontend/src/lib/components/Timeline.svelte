@@ -94,11 +94,18 @@
     currentProject.removeBRoll(clipId);
   }
 
+  // Improved caption positioning with better anti-overlap
   function getCaptionStyle(caption, index) {
     const top = (caption.start / duration) * 100;
-    const height = Math.max(4, ((caption.end - caption.start) / duration) * 100); // Minimum 4% height
-    const verticalOffset = (index % 3) * 30; // Stagger vertically to prevent overlap
-    return `top: ${top}%; height: ${height}%; left: ${verticalOffset}px; right: ${30 - verticalOffset}px;`;
+    const height = Math.max(6, ((caption.end - caption.start) / duration) * 100); // Minimum 6% height
+    
+    // Better anti-overlap: use modulo to distribute in lanes
+    const laneCount = 3;
+    const lane = index % laneCount;
+    const laneWidth = 28; // Width percentage per lane
+    const leftPos = 2 + (lane * laneWidth); // Start at 2%, then 30%, then 58%
+    
+    return `top: ${top}%; height: ${height}%; left: ${leftPos}%; width: ${laneWidth - 2}%;`;
   }
 
   function formatTimeRange(start, end) {
@@ -110,11 +117,10 @@
     return `${format(start)} - ${format(end)}`;
   }
 
-  function getPlayheadStyle() {
-    if (!duration || duration <= 0) return 'top: 0%;';
-    const top = (currentTime / duration) * 100;
-    return `top: ${Math.max(0, Math.min(100, top))}%;`;
-  }
+  // Reactive playhead style - updates whenever currentTime changes
+  $: playheadStyle = (!duration || duration <= 0) 
+    ? 'top: 0%;' 
+    : `top: ${Math.max(0, Math.min(100, (currentTime / duration) * 100))}%;`;
 </script>
 
 <div class="h-full flex flex-col bg-dark">
@@ -213,8 +219,8 @@
 
       <!-- Horizontal Playhead - ALWAYS UPDATING -->
       <div 
-        class="absolute left-0 right-0 h-0.5 bg-white z-50 pointer-events-none"
-        style={getPlayheadStyle()}
+        class="absolute left-0 right-0 h-0.5 bg-white z-50 pointer-events-none transition-all duration-75"
+        style={playheadStyle}
       >
         <div class="absolute -left-1 -top-1 w-3 h-3 bg-white rounded-full shadow-md border-2 border-primary" />
       </div>
