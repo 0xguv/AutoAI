@@ -21,8 +21,11 @@
     exporting = true;
     exportStatus = 'Preparing...';
     exportProgress = 0;
+    let downloadUrl = null;
 
     try {
+      console.log('Starting export for project:', $currentProject.id);
+      
       const response = await fetch(`/api/export/${$currentProject.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -33,33 +36,49 @@
         })
       });
 
-      if (!response.ok) throw new Error('Export failed');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Export failed');
+      }
 
       const data = await response.json();
+      console.log('Export queued:', data);
       
       // Poll for progress
       const pollInterval = setInterval(async () => {
-        const statusRes = await fetch(`/api/export/status/${data.export_id}`);
-        const status = await statusRes.json();
-        
-        exportProgress = status.progress || 0;
-        exportStatus = status.message || 'Processing...';
+        try {
+          const statusRes = await fetch(`/api/export/status/${data.export_id}`);
+          const status = await statusRes.json();
+          
+          console.log('Export status:', status);
+          
+          exportProgress = status.progress || 0;
+          exportStatus = status.message || 'Processing...';
+          
+          if (status.download_url) {
+            downloadUrl = status.download_url;
+          }
 
-        if (status.status === 'completed') {
-          clearInterval(pollInterval);
-          exporting = false;
-          window.open(status.download_url, '_blank');
-          closeModal();
-        } else if (status.status === 'failed') {
-          clearInterval(pollInterval);
-          exporting = false;
-          exportStatus = 'Export failed';
+          if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            exporting = false;
+            if (status.download_url) {
+              window.open(status.download_url, '_blank');
+            }
+            closeModal();
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            exporting = false;
+            exportStatus = status.message || 'Export failed';
+          }
+        } catch (pollErr) {
+          console.error('Polling error:', pollErr);
         }
       }, 2000);
 
     } catch (err) {
       exporting = false;
-      exportStatus = 'Export failed';
+      exportStatus = `Error: ${err.message}`;
       console.error('Export error:', err);
     }
   }
