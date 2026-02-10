@@ -95,14 +95,32 @@
     
     console.log('Downloading:', fullUrl);
     
-    // Create download link
-    const a = document.createElement('a');
-    a.href = fullUrl;
-    a.download = `exported-video-${Date.now()}.mp4`;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Try to force download by fetching the blob
+    fetch(fullUrl)
+      .then(response => response.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `video-${Date.now()}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      })
+      .catch(err => {
+        console.error('Download failed:', err);
+        // Fallback: open in new tab
+        window.open(fullUrl, '_blank');
+      });
+  }
+  
+  function getFullVideoUrl() {
+    if (!downloadUrl) return '';
+    return downloadUrl.startsWith('http') 
+      ? downloadUrl 
+      : `${window.location.origin}${downloadUrl}`;
   }
 
   function closeModal() {
@@ -127,7 +145,7 @@
     transition:fade={{ duration: 200 }}
   >
     <div 
-      class="bg-dark-light rounded-2xl w-full max-w-md p-6 border border-dark-lighter"
+      class="bg-dark-light rounded-2xl w-full max-w-2xl p-6 border border-dark-lighter"
       on:click|stopPropagation
       transition:scale={{ duration: 200, start: 0.95 }}
     >
@@ -197,31 +215,56 @@
         </div>
 
       {:else if step === 'complete'}
-        <!-- Complete with Download -->
-        <div class="text-center py-4">
-          <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/20 mb-4">
-            <svg class="w-8 h-8 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <!-- Complete with Video Preview -->
+        <div class="text-center">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-500/20 mb-3">
+            <svg class="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
             </svg>
           </div>
-          <p class="text-lg font-medium text-white mb-4">Export Complete!</p>
+          <p class="text-lg font-medium text-white mb-3">Export Complete!</p>
           
           {#if downloadUrl}
-            <button 
-              class="w-full p-4 rounded-lg bg-green-500 text-white font-medium hover:bg-green-600 flex items-center justify-center gap-2 mb-3"
-              on:click={downloadVideo}
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-              </svg>
-              Download Video
-            </button>
+            <!-- Video Preview -->
+            <div class="relative rounded-lg overflow-hidden bg-black mb-3" style="max-height: 400px;">
+              <video 
+                controls 
+                class="w-full max-h-[400px]"
+                src={getFullVideoUrl()}
+                poster=""
+              >
+                <track kind="captions" />
+              </video>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex gap-2">
+              <button 
+                class="flex-1 p-3 rounded-lg bg-green-500 text-white font-medium hover:bg-green-600 flex items-center justify-center gap-2"
+                on:click={downloadVideo}
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Download
+              </button>
+              <a 
+                href={getFullVideoUrl()}
+                target="_blank"
+                class="flex-1 p-3 rounded-lg bg-dark-lighter text-white font-medium hover:bg-dark border border-dark-lighter flex items-center justify-center gap-2"
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+                Open
+              </a>
+            </div>
           {:else}
             <p class="text-yellow-500 mb-3">Download URL not available</p>
           {/if}
           
           <button 
-            class="w-full p-2 rounded-lg border border-dark-lighter text-dark-text-light hover:bg-dark-lighter"
+            class="w-full mt-3 p-2 rounded-lg border border-dark-lighter text-dark-text-light hover:bg-dark-lighter"
             on:click={closeModal}
           >
             Close
