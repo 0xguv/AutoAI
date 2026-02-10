@@ -1697,12 +1697,19 @@ def start_export(job_id):
     from rq import Queue
     from worker import export_video_task
     
+    # Get video file path (already absolute from upload)
+    video_path = job_entry.original_video_filepath
+    
+    # Verify file exists before queuing
+    if not os.path.exists(video_path):
+        return jsonify({"error": f"Video file not found: {video_path}"}), 404
+    
     export_queue = Queue('exports', connection=redis_conn)
     export_job = export_queue.enqueue(
         export_video_task,
         job_id,  # Positional argument
         export_id,  # Positional argument
-        job_entry.original_video_filepath,  # Positional argument
+        video_path,  # Absolute path to video
         captions,  # Positional argument
         style,  # Positional argument
         settings,  # Positional argument

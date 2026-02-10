@@ -26,6 +26,14 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
     try:
         update_status("processing", 10, "Preparing video...")
         
+        print(f"Export task started: export_id={export_id}")
+        print(f"Video path: {video_path}")
+        print(f"Video exists: {os.path.exists(video_path)}")
+        
+        # Verify input video exists
+        if not os.path.exists(video_path):
+            raise Exception(f"Input video file not found: {video_path}")
+        
         # Get settings
         resolution = settings.get('resolution', '1080x1920')
         fps = settings.get('fps', 30)
@@ -36,8 +44,11 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         
         update_status("processing", 40, "Encoding video...")
         
-        # Output path
-        output_path = f"/tmp/{export_id}_final.mp4"
+        # Output path - use tmp directory in current working directory for Railway compatibility
+        tmp_dir = os.path.join(os.getcwd(), 'tmp')
+        os.makedirs(tmp_dir, exist_ok=True)
+        output_path = os.path.join(tmp_dir, f"{export_id}_final.mp4")
+        print(f"Output path: {output_path}")
         
         # FFmpeg command - use simpler approach
         crf = {'standard': '23', 'high': '18', 'ultra': '15'}[quality]
@@ -105,8 +116,13 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         
         update_status("processing", 90, "Saving file...")
         
+        # Ensure upload folder exists
+        upload_folder = app.config['UPLOAD_FOLDER']
+        os.makedirs(upload_folder, exist_ok=True)
+        print(f"Upload folder: {upload_folder}")
+        
         # Move to uploads folder
-        final_output = os.path.join(app.config['UPLOAD_FOLDER'], f"{export_id}.mp4")
+        final_output = os.path.join(upload_folder, f"{export_id}.mp4")
         
         # Copy instead of rename to avoid cross-device issues
         import shutil
