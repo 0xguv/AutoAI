@@ -96,8 +96,17 @@
 
   function getCaptionStyle(caption) {
     const top = (caption.start / duration) * 100;
-    const height = ((caption.end - caption.start) / duration) * 100;
-    return `top: ${top}%; height: ${Math.max(1, height)}%;`;
+    const height = Math.max(3, ((caption.end - caption.start) / duration) * 100); // Minimum 3% height
+    return `top: ${top}%; height: ${height}%;`;
+  }
+
+  function formatTimeRange(start, end) {
+    const format = (seconds) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+    return `${format(start)} - ${format(end)}`;
   }
 
   function getPlayheadStyle() {
@@ -109,7 +118,7 @@
 
 <div class="h-full flex flex-col bg-dark">
   <!-- Timeline Header -->
-  <div class="h-10 border-b border-dark-lighter flex items-center justify-center px-2 bg-dark-light">
+  <div class="h-10 flex items-center justify-center px-2 bg-dark-light">
     <span class="text-xs font-medium text-dark-text-light">Timeline</span>
   </div>
 
@@ -131,17 +140,20 @@
         {/each}
       </div>
 
-      <!-- Caption Blocks - Vertical layout -->
-      <div class="absolute top-0 bottom-0 left-2 right-2">
+      <!-- Caption Blocks - Vertical layout (moved to top area) -->
+      <div class="absolute top-0 bottom-0 left-2 right-8">
         {#each captions as caption}
           <button
-            class="absolute left-0 right-0 mx-1 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-center px-2 overflow-hidden text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
+            class="absolute left-0 right-0 mx-1 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-start px-2 py-1 overflow-hidden text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
             style={getCaptionStyle(caption)}
             on:click|stopPropagation={() => handleCaptionClick(caption)}
             title={caption.text}
           >
+            <span class="text-[10px] text-primary-light/80 font-mono mb-0.5">
+              {formatTimeRange(caption.start, caption.end)}
+            </span>
             <span class="truncate w-full text-center leading-tight text-xs">
-              {caption.text.slice(0, 30)}{caption.text.length > 30 ? '...' : ''}
+              {caption.text.slice(0, 25)}{caption.text.length > 25 ? '...' : ''}
             </span>
           </button>
         {/each}
@@ -200,10 +212,10 @@
 
       <!-- Horizontal Playhead -->
       <div 
-        class="absolute left-0 right-0 h-0.5 bg-red-500 z-10 pointer-events-none transition-all duration-75 ease-linear"
+        class="absolute left-0 right-0 h-0.5 bg-primary z-10 pointer-events-none transition-all duration-75 ease-linear"
         style={getPlayheadStyle()}
       >
-        <div class="absolute -left-1.5 -top-1 w-3 h-3 bg-red-500 rounded-full" />
+        <div class="absolute -left-1 -top-1 w-3 h-3 bg-primary rounded-full shadow-md" />
       </div>
     </button>
   </div>

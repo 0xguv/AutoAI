@@ -4,9 +4,11 @@
   import { videoState } from '../stores/videoPlayerStore';
 
   let videoElement;
+  let progressBar;
   
   $: project = $currentProject;
   $: video = $videoState;
+  $: progressPercent = video?.duration > 0 ? (video.currentTime / video.duration) * 100 : 0;
   
   // Get active caption for current time
   $: activeCaption = project?.captions?.find(c => 
@@ -44,8 +46,26 @@
     }
   }
 
+  function handleKeydown(event) {
+    if (event.code === 'Space' && event.target === document.body) {
+      event.preventDefault();
+      togglePlay();
+    }
+  }
+
+  function handleProgressClick(event) {
+    if (!videoElement || !video.duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = x / rect.width;
+    const newTime = percentage * video.duration;
+    videoElement.currentTime = newTime;
+    videoState.setCurrentTime(newTime);
+  }
+
   onMount(() => {
     window.addEventListener('timeline-seek', handleTimelineSeek);
+    window.addEventListener('keydown', handleKeydown);
     
     if (videoElement) {
       videoElement.addEventListener('timeupdate', handleTimeUpdate);
@@ -56,6 +76,7 @@
 
     return () => {
       window.removeEventListener('timeline-seek', handleTimelineSeek);
+      window.removeEventListener('keydown', handleKeydown);
       if (videoElement) {
         videoElement.removeEventListener('timeupdate', handleTimeUpdate);
         videoElement.removeEventListener('loadedmetadata', handleMetadata);
@@ -114,11 +135,9 @@
       bind:this={videoElement}
       src={project.videoUrl}
       class="w-full h-full object-contain"
-      on:click={togglePlay}
       crossorigin="anonymous"
       playsinline
-      muted
-      autoplay
+      controls
     >
       <track kind="captions" />
     </video>
@@ -194,6 +213,19 @@
   <div class="absolute bottom-4 left-4 text-white text-sm font-mono bg-black/60 px-2 py-1 rounded z-10">
     {Math.floor(video.currentTime / 60)}:{(Math.floor(video.currentTime) % 60).toString().padStart(2, '0')}
   </div>
+
+  <!-- Video Progress Bar -->
+  {#if project?.videoUrl && video?.duration > 0}
+    <div 
+      class="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-700 cursor-pointer z-20 hover:h-2 transition-all"
+      on:click={handleProgressClick}
+    >
+      <div 
+        class="h-full bg-primary transition-all duration-75"
+        style="width: {progressPercent}%"
+      />
+    </div>
+  {/if}
 </div>
 
 <style>
