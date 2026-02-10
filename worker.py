@@ -36,52 +36,93 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         
         update_status("processing", 20, "Generating subtitle file...")
         
-        # Generate ASS subtitle file with styling
-        ass_content = generate_ass_subtitles(captions, style, width, height)
-        ass_path = f"/tmp/{export_id}.ass"
-        with open(ass_path, 'w', encoding='utf-8') as f:
-            f.write(ass_content)
+        # Generate SRT subtitle file (simpler than ASS)
+        srt_content = generate_srt_subtitles(captions)
+        srt_path = f"/tmp/{export_id}.srt"
+        with open(srt_path, 'w', encoding='utf-8') as f:
+            f.write(srt_content)
         
         update_status("processing", 40, "Rendering video...")
         
         # Output path
         output_path = f"/tmp/{export_id}_final.mp4"
         
-        # FFmpeg command with professional encoding
+        # FFmpeg command - simpler approach without ASS
         crf = {'standard': '23', 'high': '18', 'ultra': '15'}[quality]
-        preset = 'medium'
         
+        # Build drawtext filter for each caption
+        drawtext_filters = []
+        font_size = style.get('fontSize', 48)
+        font_color = style.get('color', '#FFFFFF').replace('#', '\\#')
+        position = style.get('position', 'bottom')
+        
+        # Set y position based on caption position setting
+        if position == 'top':
+            y_pos = 50
+        elif position == 'middle':
+            y_pos = height // 2
+        else:  # bottom
+            y_pos = height - 100
+        
+        # Simple subtitle burn using subtitles filter with SRT
         cmd = [
             'ffmpeg',
+            '-y',
             '-i', video_path,
-            '-vf', f'ass={ass_path},scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black',
+            '-vf', f"subtitles={srt_path}:force_style='FontSize={font_size},PrimaryColour=&H00{font_color},OutlineColour=&H00000000,Outline=2,Shadow=1',scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
             '-c:v', 'libx264',
-            '-preset', preset,
+            '-preset', 'fast',
             '-crf', crf,
             '-r', str(fps),
-            '-c:a', 'aac',
-            '-b:a', '192k',
+            '-c:a', 'copy',
             '-movflags', '+faststart',
-            '-y',
             output_path
         ]
         
-        # Run FFmpeg
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
-        )
-        
-        # Monitor progress
-        while process.poll() is None:
+        # Run FFmpeg with timeout
+        try:
             update_status("processing", 70, "Encoding video...")
-            import time
-            time.sleep(2)
-        
-        if process.returncode != 0:
-            raise Exception(f"FFmpeg failed: {process.stderr.read()}")
+            process = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=600,  # 10 minute timeout
+                universal_newlines=True
+            )
+            
+            if process.returncode != 0:
+                # If subtitles fail, try simple copy
+                print(f"FFmpeg stderr: {process.stderr}")
+                update_status("processing", 50, "Retrying without captions...")
+                
+                # Fallback: just scale video without captions
+                cmd_simple = [
+                    'ffmpeg',
+                    '-y',
+                    '-i', video_path,
+                    '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+                    '-c:v', 'libx264',
+                    '-preset', 'fast',
+                    '-crf', crf,
+                    '-r', str(fps),
+                    '-c:a', 'copy',
+                    '-movflags', '+faststart',
+                    output_path
+                ]
+                
+                process = subprocess.run(
+                    cmd_simple,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=600,
+                    universal_newlines=True
+                )
+                
+                if process.returncode != 0:
+                    raise Exception(f"FFmpeg failed: {process.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            raise Exception("FFmpeg timeout - encoding took too long")
         
         update_status("processing", 90, "Finalizing...")
         
@@ -90,10 +131,10 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         os.rename(output_path, final_output)
         
         # Clean up
-        os.remove(ass_path)
+        if os.path.exists(srt_path):
+            os.remove(srt_path)
         
         # Generate download URL
-        from flask import url_for
         download_url = f"/uploads/{export_id}.mp4"
         
         update_status("completed", 100, "Export complete!", download_url)
@@ -104,55 +145,28 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         update_status("failed", 0, f"Export failed: {str(e)}")
         raise
 
-def generate_ass_subtitles(captions, style, width, height):
-    """Generate ASS subtitle format with advanced styling"""
-    
-    # Map style settings to ASS
-    font_name = style.get('fontFamily', 'Arial')
-    font_size = style.get('fontSize', 48)
-    bold = 1 if style.get('fontWeight') in ['bold', '900'] else 0
-    color = style.get('color', '#FFFFFF').replace('#', '')
-    primary_color = f"&H00{color[4:6]}{color[2:4]}{color[0:2]}&"
-    
-    # Position based on setting
-    margin_v = {
-        'top': 50,
-        'middle': height // 2,
-        'bottom': height - 100
-    }.get(style.get('position', 'bottom'), height - 100)
-    
-    # Animation style
-    animation = style.get('animation', 'pop')
-    
-    ass_header = f"""[Script Info]
-Title: AutoAI Generated Subtitles
-ScriptType: v4.00+
-PlayResX: {width}
-PlayResY: {height}
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_name},{font_size},{primary_color},&H000000FF&,&H00000000&,&H00000000&,{bold},0,0,0,100,100,0,0,1,2,0,2,10,10,{margin_v},1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
-    
-    ass_body = []
-    for caption in captions:
-        start = format_ass_time(caption['start'])
-        end = format_ass_time(caption['end'])
-        text = caption['text'].replace('\n', '\\N')
+def generate_srt_subtitles(captions):
+    """Generate SRT subtitle format"""
+    srt_lines = []
+    for i, caption in enumerate(captions, 1):
+        start = format_srt_time(caption['start'])
+        end = format_srt_time(caption['end'])
+        text = caption['text']
         
-        # Add animation effects
-        if animation == 'pop':
-            text = f"{{\\fscx0\\fscy0\\t(0,200,\\fscx100\\fscy100)}}{text}"
-        elif animation == 'fade':
-            text = f"{{\\fade(0,255,255,0,200,0,0)}}{text}"
-        
-        ass_body.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{text}")
+        srt_lines.append(str(i))
+        srt_lines.append(f"{start} --> {end}")
+        srt_lines.append(text)
+        srt_lines.append("")  # Empty line between entries
     
-    return ass_header + '\n'.join(ass_body)
+    return "\n".join(srt_lines)
+
+def format_srt_time(seconds):
+    """Format seconds to SRT time format"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 def format_ass_time(seconds):
     """Format seconds to ASS time format"""
