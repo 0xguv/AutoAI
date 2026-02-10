@@ -87,8 +87,31 @@
     }
   }
 
-  function handleDownload() {
-    if (downloadUrl) {
+  async function handleDownload() {
+    if (!downloadUrl) return;
+    
+    try {
+      // Fetch the file
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error('Download failed');
+      
+      // Get blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `video-${Date.now()}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download error:', err);
+      // Fallback: open in new tab
       window.open(downloadUrl, '_blank');
     }
   }

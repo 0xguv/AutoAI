@@ -6,9 +6,89 @@ import time
 from rq import Worker, Queue
 from app import app, redis_conn, transcribe_video_task, burn_subtitles_task
 
+def generate_ass_subtitles(captions, style, width, height):
+    """
+    Generate ASS subtitle content from captions with styling
+    """
+    # Extract style settings
+    font_family = style.get('fontFamily', 'Inter')
+    font_size = style.get('fontSize', 42)
+    font_color = style.get('color', '#FFFFFF')
+    bg_color = style.get('backgroundColor', 'transparent')
+    stroke_color = style.get('strokeColor', '#000000')
+    stroke_width = style.get('strokeWidth', 2)
+    
+    # Convert hex colors to ASS format (BGR)
+    def hex_to_ass(hex_color):
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return f"&H00{b:02X}{g:02X}{r:02X}"
+    
+    font_color_ass = hex_to_ass(font_color)
+    stroke_color_ass = hex_to_ass(stroke_color)
+    
+    # Calculate vertical position (bottom center)
+    margin_v = height - int(font_size * 3)
+    
+    ass_content = f"""[Script Info]
+Title: AutoAI Export
+ScriptType: v4.00+
+PlayResX: {width}
+PlayResY: {height}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{font_family},{font_size},{font_color_ass},{font_color_ass},{stroke_color_ass},&H00000000,0,0,0,0,100,100,0,0,1,{stroke_width},0,2,10,10,{margin_v},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    
+    # Convert seconds to ASS time format (H:MM:SS.cc)
+    def seconds_to_ass(seconds):
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        centis = int((seconds % 1) * 100)
+        return f"{hours}:{minutes:02d}:{secs:02d}.{centis:02d}"
+    
+    # Generate dialogue lines
+    for caption in captions:
+        start_time = seconds_to_ass(caption.get('start', 0))
+        end_time = seconds_to_ass(caption.get('end', 0))
+        text = caption.get('text', '')
+        
+        # Escape special ASS characters
+        text = text.replace('\\', '\\\\').replace('{', '\\{').replace('}', '\\}')
+        
+        # Add karaoke-style word highlighting if words are present
+        words = caption.get('words', [])
+        if words:
+            # Build text with word timing
+            highlighted_text = ""
+            for i, word in enumerate(words):
+                word_text = word.get('text', '')
+                word_start = word.get('start', 0)
+                word_end = word.get('end', 0)
+                duration = word_end - word_start
+                
+                # Escape special chars
+                word_text = word_text.replace('\\', '\\\\').replace('{', '\\{').replace('}', '\\}')
+                
+                # Add karaoke tag (\k duration in centiseconds)
+                duration_cs = int(duration * 100)
+                highlighted_text += f"{{\\k{duration_cs}}}{word_text} "
+            text = highlighted_text.strip()
+        
+        ass_content += f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n"
+    
+    return ass_content
+
 def export_video_task(job_id, export_id, video_path, captions, style, settings):
     """
-    Professional video export with FFmpeg
+    Professional video export with FFmpeg - ACTUALLY burns subtitles
     """
     from app import redis_conn
     
@@ -42,69 +122,63 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         # Parse resolution
         width, height = map(int, resolution.split('x'))
         
-        update_status("processing", 40, "Encoding video...")
+        update_status("processing", 30, "Generating subtitles...")
         
-        # Output path - use tmp directory in current working directory for Railway compatibility
+        # Generate ASS subtitle file
         tmp_dir = os.path.join(os.getcwd(), 'tmp')
         os.makedirs(tmp_dir, exist_ok=True)
+        
+        ass_content = generate_ass_subtitles(captions, style, width, height)
+        ass_path = os.path.join(tmp_dir, f"{export_id}.ass")
+        
+        with open(ass_path, 'w', encoding='utf-8') as f:
+            f.write(ass_content)
+        
+        print(f"Generated ASS file: {ass_path}")
+        
+        update_status("processing", 50, "Encoding video with subtitles...")
+        
+        # Output path
         output_path = os.path.join(tmp_dir, f"{export_id}_final.mp4")
         print(f"Output path: {output_path}")
         
-        # FFmpeg command - use simpler approach
-        crf = {'standard': '23', 'high': '18', 'ultra': '15'}[quality]
+        # Build video filter with subtitles
+        # First scale/pad, then burn subtitles
+        video_filter = f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,ass={ass_path}"
         
-        # Memory-optimized FFmpeg command for Railway
-        # NO faststart flag - it causes OOM by buffering entire file in memory
+        # Memory-optimized FFmpeg command
         cmd = [
             'ffmpeg',
             '-y',
-            '-threads', '2',  # Limit threads to prevent OOM
+            '-threads', '2',
             '-i', video_path,
-            '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
+            '-vf', video_filter,
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',  # Fastest preset = less memory
-            '-crf', '28',  # Higher CRF = smaller file, less processing
+            '-preset', 'ultrafast',
+            '-crf', '28',
             '-r', str(fps),
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
-            '-b:a', '128k',  # Lower audio bitrate
+            '-b:a', '128k',
             output_path
         ]
         
-        print(f"Starting FFmpeg export: {' '.join(cmd)}")
-        update_status("processing", 60, "Encoding...")
+        print(f"Starting FFmpeg: {' '.join(cmd)}")
         
-        # First check video file with ffprobe
-        print("Checking input video with ffprobe...")
-        probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 
-                     'default=noprint_wrappers=1:nokey=1', video_path]
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
-        print(f"Video duration check: {probe_result.stdout.strip() if probe_result.returncode == 0 else 'FAILED'}")
-        if probe_result.returncode != 0:
-            print(f"ffprobe stderr: {probe_result.stderr}")
-        
-        # Try simpler approach - just copy the video first
-        print("Attempting simple video copy to verify file is readable...")
-        simple_cmd = ['ffmpeg', '-y', '-i', video_path, '-c', 'copy', '-f', 'null', '-']
-        simple_result = subprocess.run(simple_cmd, capture_output=True, text=True, timeout=30)
-        print(f"Simple copy test exit code: {simple_result.returncode}")
-        if simple_result.returncode != 0:
-            print(f"Simple copy stderr: {simple_result.stderr[-500:]}")
-        
-        # Run FFmpeg with real-time output - use stderr for progress
+        # Run FFmpeg
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Redirect stderr to stdout to capture everything
+            stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1
         )
         
-        # Capture output in real-time
+        # Capture output
         output_lines = []
         for line in process.stdout:
             output_lines.append(line)
-            if len(output_lines) > 100:  # Keep last 100 lines
+            if len(output_lines) > 100:
                 output_lines.pop(0)
             print(f"FFmpeg: {line.strip()}")
         
@@ -114,42 +188,31 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         
         if process.returncode != 0:
             full_output = ''.join(output_lines)
-            print(f"FFmpeg failed. Full output:\n{full_output}")
-            raise Exception(f"FFmpeg encoding failed. Check logs for details.")
+            print(f"FFmpeg failed:\n{full_output}")
+            raise Exception("FFmpeg encoding failed")
         
-        # Verify output file exists and has content
+        # Verify output
         if not os.path.exists(output_path):
             raise Exception("Output file was not created")
         
         file_size = os.path.getsize(output_path)
         print(f"Output file size: {file_size} bytes")
         
-        if file_size < 1000:  # Less than 1KB is probably empty
-            raise Exception(f"Output file is too small ({file_size} bytes)")
-        
-        # Verify it's a valid video by checking duration
-        probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', 
-                     '-of', 'default=noprint_wrappers=1:nokey=1', output_path]
-        probe_process = subprocess.run(probe_cmd, capture_output=True, text=True)
-        
-        if probe_process.returncode == 0:
-            duration = probe_process.stdout.strip()
-            print(f"Output video duration: {duration}s")
+        if file_size < 1000:
+            raise Exception(f"Output file too small ({file_size} bytes)")
         
         update_status("processing", 90, "Saving file...")
         
-        # Ensure upload folder exists
+        # Move to uploads folder
         upload_folder = app.config['UPLOAD_FOLDER']
         os.makedirs(upload_folder, exist_ok=True)
-        print(f"Upload folder: {upload_folder}")
         
-        # Move to uploads folder
         final_output = os.path.join(upload_folder, f"{export_id}.mp4")
         
-        # Copy instead of rename to avoid cross-device issues
         import shutil
         shutil.copy2(output_path, final_output)
         os.remove(output_path)
+        os.remove(ass_path)  # Clean up subtitle file
         
         # Verify final file
         if not os.path.exists(final_output):
