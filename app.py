@@ -1733,6 +1733,11 @@ def get_export_status(export_id):
         "message": "Initializing..."
     })
 
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serve uploaded and exported video files"""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 # Enhanced transcription with word-level timestamps
 @app.route('/api/transcribe_word_level', methods=['POST'])
 @login_required
