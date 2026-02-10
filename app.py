@@ -1700,12 +1700,12 @@ def start_export(job_id):
     export_queue = Queue('exports', connection=redis_conn)
     export_job = export_queue.enqueue(
         export_video_task,
-        job_id=job_id,
-        export_id=export_id,
-        video_path=job_entry.original_video_filepath,
-        captions=captions,
-        style=style,
-        settings=settings,
+        job_id,  # Positional argument
+        export_id,  # Positional argument
+        job_entry.original_video_filepath,  # Positional argument
+        captions,  # Positional argument
+        style,  # Positional argument
+        settings,  # Positional argument
         job_timeout='1h'
     )
     
