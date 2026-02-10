@@ -73,27 +73,48 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         print(f"Starting FFmpeg export: {' '.join(cmd)}")
         update_status("processing", 60, "Encoding...")
         
-        # Run FFmpeg with real-time output
+        # First check video file with ffprobe
+        print("Checking input video with ffprobe...")
+        probe_cmd = ['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 
+                     'default=noprint_wrappers=1:nokey=1', video_path]
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True)
+        print(f"Video duration check: {probe_result.stdout.strip() if probe_result.returncode == 0 else 'FAILED'}")
+        if probe_result.returncode != 0:
+            print(f"ffprobe stderr: {probe_result.stderr}")
+        
+        # Try simpler approach - just copy the video first
+        print("Attempting simple video copy to verify file is readable...")
+        simple_cmd = ['ffmpeg', '-y', '-i', video_path, '-c', 'copy', '-f', 'null', '-']
+        simple_result = subprocess.run(simple_cmd, capture_output=True, text=True, timeout=30)
+        print(f"Simple copy test exit code: {simple_result.returncode}")
+        if simple_result.returncode != 0:
+            print(f"Simple copy stderr: {simple_result.stderr[-500:]}")
+        
+        # Run FFmpeg with real-time output - use stderr for progress
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
+            stderr=subprocess.STDOUT,  # Redirect stderr to stdout to capture everything
+            universal_newlines=True,
+            bufsize=1
         )
         
-        # Wait for process to complete with timeout
-        try:
-            stdout, stderr = process.communicate(timeout=600)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            raise Exception("FFmpeg timeout after 10 minutes")
+        # Capture output in real-time
+        output_lines = []
+        for line in process.stdout:
+            output_lines.append(line)
+            if len(output_lines) > 100:  # Keep last 100 lines
+                output_lines.pop(0)
+            print(f"FFmpeg: {line.strip()}")
+        
+        process.wait()
         
         print(f"FFmpeg exit code: {process.returncode}")
         
         if process.returncode != 0:
-            error_msg = stderr[-1000:] if stderr else "Unknown error"
-            print(f"FFmpeg failed: {error_msg}")
-            raise Exception(f"FFmpeg encoding failed: {error_msg}")
+            full_output = ''.join(output_lines)
+            print(f"FFmpeg failed. Full output:\n{full_output}")
+            raise Exception(f"FFmpeg encoding failed. Check logs for details.")
         
         # Verify output file exists and has content
         if not os.path.exists(output_path):
