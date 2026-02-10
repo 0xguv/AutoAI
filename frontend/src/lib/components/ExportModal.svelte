@@ -64,8 +64,13 @@
 
           if (status.status === 'completed') {
             clearInterval(pollInterval);
+            console.log('Export COMPLETED! download_url:', status.download_url);
             exporting = false;
             exportComplete = true;
+            if (status.download_url) {
+              downloadUrl = status.download_url;
+              console.log('Set downloadUrl to:', downloadUrl);
+            }
             exportStatus = 'Export complete!';
             exportProgress = 100;
           } else if (status.status === 'failed') {
@@ -169,16 +174,20 @@
             />
           </div>
 
-          {#if exportComplete && downloadUrl}
-            <button 
-              class="w-full p-3 rounded-lg bg-green-500 text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-2"
-              on:click={handleDownload}
-            >
-              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-              </svg>
-              Download Video
-            </button>
+          {#if exportComplete}
+            {#if downloadUrl}
+              <button 
+                class="w-full p-3 rounded-lg bg-green-500 text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-2"
+                on:click={handleDownload}
+              >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Download Video
+              </button>
+            {:else}
+              <p class="text-yellow-500 text-sm">Export complete but download URL not available</p>
+            {/if}
             <button 
               class="w-full p-2 rounded-lg border border-dark-lighter text-dark-text-light hover:bg-dark-lighter transition"
               on:click={closeModal}
