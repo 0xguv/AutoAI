@@ -54,7 +54,7 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         crf = {'standard': '23', 'high': '18', 'ultra': '15'}[quality]
         
         # Memory-optimized FFmpeg command for Railway
-        # Limit threads to prevent OOM kills
+        # NO faststart flag - it causes OOM by buffering entire file in memory
         cmd = [
             'ffmpeg',
             '-y',
@@ -68,7 +68,6 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
             '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
             '-b:a', '128k',  # Lower audio bitrate
-            '-movflags', '+faststart',
             output_path
         ]
         
