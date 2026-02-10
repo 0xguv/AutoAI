@@ -53,19 +53,21 @@ def export_video_task(job_id, export_id, video_path, captions, style, settings):
         # FFmpeg command - use simpler approach
         crf = {'standard': '23', 'high': '18', 'ultra': '15'}[quality]
         
-        # First, let's just copy the video with proper scaling
+        # Memory-optimized FFmpeg command for Railway
+        # Limit threads to prevent OOM kills
         cmd = [
             'ffmpeg',
             '-y',
+            '-threads', '2',  # Limit threads to prevent OOM
             '-i', video_path,
             '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black",
             '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', crf,
+            '-preset', 'ultrafast',  # Fastest preset = less memory
+            '-crf', '28',  # Higher CRF = smaller file, less processing
             '-r', str(fps),
-            '-pix_fmt', 'yuv420p',  # Required for compatibility
+            '-pix_fmt', 'yuv420p',
             '-c:a', 'aac',
-            '-b:a', '192k',
+            '-b:a', '128k',  # Lower audio bitrate
             '-movflags', '+faststart',
             output_path
         ]
