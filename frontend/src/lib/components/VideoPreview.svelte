@@ -129,7 +129,7 @@
 <div 
   class="relative w-full max-w-md aspect-[9/16] bg-black rounded-2xl overflow-hidden shadow-2xl"
 >
-  <!-- Video Element - SIMPLIFIED -->
+  <!-- Video Element with Custom Controls -->
   {#if project?.videoUrl}
     <video
       bind:this={videoElement}
@@ -138,6 +138,7 @@
       crossorigin="anonymous"
       playsinline
       controls
+      controlsList="nofullscreen"
     >
       <track kind="captions" />
     </video>
@@ -195,19 +196,23 @@
     </div>
   {/if}
 
-  <!-- Play Button Overlay (when paused) -->
-  {#if !video.isPlaying}
-    <button 
-      class="absolute inset-0 flex items-center justify-center bg-black/30 transition-opacity hover:bg-black/40 z-10"
-      on:click={togglePlay}
-    >
-      <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+  <!-- Play/Pause Button Overlay (always visible) -->
+  <button 
+    class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 opacity-0 hover:opacity-100 transition-opacity duration-200"
+    on:click={togglePlay}
+  >
+    <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg hover:scale-110 transition-transform">
+      {#if video.isPlaying}
+        <svg class="w-8 h-8 text-gray-900" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+        </svg>
+      {:else}
         <svg class="w-8 h-8 text-gray-900 ml-1" fill="currentColor" viewBox="0 0 24 24">
           <path d="M8 5v14l11-7z"/>
         </svg>
-      </div>
-    </button>
-  {/if}
+      {/if}
+    </div>
+  </button>
 
   <!-- Current Time Indicator -->
   <div class="absolute bottom-4 left-4 text-white text-sm font-mono bg-black/60 px-2 py-1 rounded z-10">

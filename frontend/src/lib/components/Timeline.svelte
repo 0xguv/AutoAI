@@ -94,10 +94,11 @@
     currentProject.removeBRoll(clipId);
   }
 
-  function getCaptionStyle(caption) {
+  function getCaptionStyle(caption, index) {
     const top = (caption.start / duration) * 100;
-    const height = Math.max(3, ((caption.end - caption.start) / duration) * 100); // Minimum 3% height
-    return `top: ${top}%; height: ${height}%;`;
+    const height = Math.max(4, ((caption.end - caption.start) / duration) * 100); // Minimum 4% height
+    const verticalOffset = (index % 3) * 30; // Stagger vertically to prevent overlap
+    return `top: ${top}%; height: ${height}%; left: ${verticalOffset}px; right: ${30 - verticalOffset}px;`;
   }
 
   function formatTimeRange(start, end) {
@@ -140,20 +141,20 @@
         {/each}
       </div>
 
-      <!-- Caption Blocks - Vertical layout (moved to top area) -->
+      <!-- Caption Blocks - Vertical layout with proper spacing -->
       <div class="absolute top-0 bottom-0 left-2 right-8">
-        {#each captions as caption}
+        {#each captions as caption, index}
           <button
-            class="absolute left-0 right-0 mx-1 rounded bg-primary-dark border-2 border-primary-dark hover:bg-primary transition flex flex-col items-center justify-start px-2 py-1 overflow-hidden text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-primary' : ''}"
-            style={getCaptionStyle(caption)}
+            class="absolute mx-1 rounded bg-primary-dark border-2 border-primary hover:bg-primary transition flex flex-col items-center justify-center px-2 py-2 text-white {$uiState.selectedCaptionId === caption.id ? 'ring-2 ring-white z-10' : 'z-0'}"
+            style={getCaptionStyle(caption, index)}
             on:click|stopPropagation={() => handleCaptionClick(caption)}
             title={caption.text}
           >
-            <span class="text-[10px] text-primary-light/80 font-mono mb-0.5">
+            <span class="text-[9px] text-primary-light font-mono mb-1">
               {formatTimeRange(caption.start, caption.end)}
             </span>
-            <span class="truncate w-full text-center leading-tight text-xs">
-              {caption.text.slice(0, 25)}{caption.text.length > 25 ? '...' : ''}
+            <span class="w-full text-center leading-tight text-[11px] font-medium break-words line-clamp-3">
+              {caption.text}
             </span>
           </button>
         {/each}
@@ -210,12 +211,12 @@
         </div>
       {/if}
 
-      <!-- Horizontal Playhead -->
+      <!-- Horizontal Playhead - ALWAYS UPDATING -->
       <div 
-        class="absolute left-0 right-0 h-0.5 bg-primary z-10 pointer-events-none transition-all duration-75 ease-linear"
+        class="absolute left-0 right-0 h-0.5 bg-white z-50 pointer-events-none"
         style={getPlayheadStyle()}
       >
-        <div class="absolute -left-1 -top-1 w-3 h-3 bg-primary rounded-full shadow-md" />
+        <div class="absolute -left-1 -top-1 w-3 h-3 bg-white rounded-full shadow-md border-2 border-primary" />
       </div>
     </button>
   </div>
